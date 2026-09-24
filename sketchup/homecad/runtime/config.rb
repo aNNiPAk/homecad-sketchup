@@ -3,7 +3,7 @@ module HomeCAD
     module Config
       HOST = '127.0.0.1'
       DEFAULT_PORT = 37_941
-      MAX_FRAME_BYTES = 1_048_576
+      MAX_FRAME_BYTES = 16 * 1024 * 1024
       CLIENT_IDLE_SECONDS = 10
       MAX_CLIENTS = 8
 

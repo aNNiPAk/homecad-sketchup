@@ -1,0 +1,8 @@
+.references/
+.serena/
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+dist/
+*.rbz

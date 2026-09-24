@@ -12,14 +12,20 @@ module HomeCAD
           return hello(params)
         end
 
-        raise BridgeError.new(-32602, 'invalid_request', 'params must be an empty object') unless params == {}
-
         case method
-        when 'homecad_status' then status
-        when 'get_model_info' then model_info
+        when 'homecad_status' then empty!(params); status
+        when 'get_model_info' then empty!(params); model_info
+        when 'list_objects' then Inspection.list(active_model!, params)
+        when 'find_objects' then Inspection.find(active_model!, params)
+        when 'get_object' then Inspection.get(active_model!, params)
+        when 'get_selection' then Inspection.selection(active_model!, params)
         else
           raise BridgeError.new(-32601, 'unsupported_operation', "unknown method: #{method}")
         end
+      end
+
+      def self.empty!(params)
+        raise BridgeError.new(-32602, 'invalid_request', 'params must be an empty object') unless params == {}
       end
 
       def self.validate_request!(request)

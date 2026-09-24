@@ -20,8 +20,11 @@ FakeEntity = Struct.new(:persistent_id, :entityID, :typename, :name, :layer, :en
   def attribute_dictionary(_name, _create) = data
 end
 FakeModel = Struct.new(:entities, :active_entities, keyword_init: true) do
-  def find_entity_by_persistent_id(id) = entities.find { |item| item.persistent_id == id }
-  def find_entity_by_id(id) = entities.find { |item| item.entityID == id }
+  def all_entities
+    entities.flat_map { |item| [item] + Array(item.entities) }
+  end
+  def find_entity_by_persistent_id(id) = all_entities.find { |item| item.persistent_id == id }
+  def find_entity_by_id(id) = all_entities.find { |item| item.entityID == id }
 end
 
 class TargetingTest < Minitest::Test
@@ -42,13 +45,26 @@ class TargetingTest < Minitest::Test
   end
 
   def test_ambiguity_and_instance_path
-    same = FakeEntity.new(persistent_id: 11, entityID: 103, typename: 'Group', name: 'Chair')
+    same = FakeEntity.new(persistent_id: 13, entityID: 103, typename: 'Group', name: 'Chair',
+                          data: { 'homecad_id' => 'hc-chair' })
     @model.entities << same
     assert_equal 'ambiguous_target', assert_raises(HomeCAD::Runtime::BridgeError) {
-      HomeCAD::Targeting.resolve_one(@model, 'persistent_id' => 11)
+      HomeCAD::Targeting.resolve_one(@model, 'homecad_id' => 'hc-chair')
     }.category
     assert_equal @chair, HomeCAD::Targeting.resolve_one(@model,
       'persistent_id' => 11, 'entity_id' => 101).entity
+  end
+
+  def test_instance_path_selects_shared_definition_placement
+    child = FakeEntity.new(persistent_id: 91, entityID: 901, typename: 'Face', name: '')
+    first = FakeEntity.new(persistent_id: 31, entityID: 301, typename: 'ComponentInstance', entities: [child])
+    second = FakeEntity.new(persistent_id: 32, entityID: 302, typename: 'ComponentInstance', entities: [child])
+    @model.entities = [first, second]
+    assert_equal 'ambiguous_target', assert_raises(HomeCAD::Runtime::BridgeError) {
+      HomeCAD::Targeting.resolve_one(@model, 'entity_id' => 901)
+    }.category
+    entry = HomeCAD::Targeting.resolve_one(@model, 'entity_id' => 901, 'instance_path' => [32, 91])
+    assert_equal [32, 91], entry.path
   end
 
   def test_metadata_and_name_filters

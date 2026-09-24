@@ -1,6 +1,6 @@
 module HomeCAD
   module Scene
-    MAX_VISITS = 10_000
+    MAX_VISITS = 100_000
     MAX_DEPTH = 32
     Entry = Struct.new(:entity, :parent, :path, :transform, keyword_init: true)
 
@@ -9,7 +9,8 @@ module HomeCAD
     end
 
     def self.id(entity)
-      entity.respond_to?(:persistent_id) ? entity.persistent_id : entity.entityID
+      persistent = entity.respond_to?(:persistent_id) ? entity.persistent_id : nil
+      persistent.is_a?(Integer) && persistent.positive? ? persistent : entity.entityID
     end
 
     def self.children(entity)
@@ -26,7 +27,13 @@ module HomeCAD
     def self.collection(model, context: 'root', parent: nil)
       return root(model) if parent.nil? && context == 'root'
       if parent.nil? && context == 'active'
-        return model.active_entities.map { |entity| Entry.new(entity: entity, parent: nil, path: [id(entity)], transform: nil) }
+        active_path = model.respond_to?(:active_path) ? Array(model.active_path) : []
+        container = active_path.last
+        prefix = active_path.map { |entity| id(entity) }
+        transform = active_path.reduce(nil) { |value, entity| compose(value, entity) }
+        return model.active_entities.map do |entity|
+          Entry.new(entity: entity, parent: container, path: prefix + [id(entity)], transform: transform)
+        end
       end
       raise Runtime::BridgeError.new(-32602, 'invalid_request', 'invalid context') unless parent
 
@@ -55,7 +62,7 @@ module HomeCAD
         next unless children
 
         transform = compose(entry.transform, entry.entity)
-        children.reverse_each do |entity|
+        children.to_a.reverse_each do |entity|
           stack << [Entry.new(entity: entity, parent: entry.entity,
                               path: entry.path + [id(entity)], transform: transform), depth + 1]
         end

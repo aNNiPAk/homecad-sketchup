@@ -66,7 +66,8 @@ async def list_objects(context: str = "root", parent: dict | None = None,
 async def find_objects(homecad_id: str | None = None, persistent_id: int | None = None,
                        entity_id: int | None = None, entity_type: str | None = None,
                        homecad_type: str | None = None, name: str | None = None,
-                       tag: str | None = None, parent_id: int | None = None,
+                       tag: str | None = None, parent_id: int | str | None = None,
+                       room_id: str | None = None,
                        metadata: dict | None = None, limit: int = 50, offset: int = 0) -> dict:
     """Find objects with explicit none, unique, ambiguous or multiple resolution."""
     filters = {key: value for key, value in locals().items()
@@ -81,9 +82,9 @@ async def get_object(target: dict) -> dict:
 
 
 @mcp.tool()
-async def get_selection() -> dict:
+async def get_selection(limit: int = 50, offset: int = 0) -> dict:
     """Read selected objects using the same identity and serializer as get_object."""
-    return await _scene_call("get_selection", {})
+    return await _scene_call("get_selection", {"limit": limit, "offset": offset})
 
 
 @mcp.tool()

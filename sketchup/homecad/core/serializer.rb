@@ -8,7 +8,9 @@ module HomeCAD
       entity = entry.entity
       identity = Targeting.identity(entry)
       data = Targeting.metadata(entity)
-      result = { 'identity' => identity, 'entity_type' => Scene.type(entity),
+      result = { 'identity' => identity, 'homecad_id' => identity['homecad_id'],
+                 'persistent_id' => identity['persistent_id'], 'entity_id' => identity['entity_id'],
+                 'entity_type' => Scene.type(entity),
                  'homecad_type' => data['type'],
                  'name' => entity.respond_to?(:name) ? entity.name.to_s : '' }
       return result if level == 'summary'
@@ -18,11 +20,12 @@ module HomeCAD
                     'tag' => entity.respond_to?(:layer) && entity.layer ? entity.layer.name : nil,
                     'material' => material_name(entity),
                     'hidden' => entity.respond_to?(:hidden?) ? entity.hidden? : false,
+                    'visible' => visible?(entity),
                     'locked' => entity.respond_to?(:locked?) ? entity.locked? : false,
                     'bbox_mm' => bounds(entry),
                     'dimensions_mm' => dimensions(entry),
-                    'parent' => entry.parent ? { 'persistent_id' => Scene.id(entry.parent),
-                                                   'entity_type' => Scene.type(entry.parent) } : nil)
+                    'context' => entry.parent ? 'nested' : 'root',
+                    'parent' => parent_identity(entry))
       return result if level == 'standard'
 
       result.merge!('metadata' => safe_value(data),
@@ -35,6 +38,21 @@ module HomeCAD
       return nil unless entity.respond_to?(:material) && entity.material
 
       entity.material.name
+    end
+
+    def self.visible?(entity)
+      return false if entity.respond_to?(:hidden?) && entity.hidden?
+
+      layer = entity.respond_to?(:layer) ? entity.layer : nil
+      layer.nil? || !layer.respond_to?(:visible?) || layer.visible?
+    end
+
+    def self.parent_identity(entry)
+      return nil unless entry.parent
+
+      parent = Scene::Entry.new(entity: entry.parent, parent: nil,
+                                path: entry.path[0...-1], transform: nil)
+      Targeting.identity(parent)
     end
 
     def self.bounds(entry)

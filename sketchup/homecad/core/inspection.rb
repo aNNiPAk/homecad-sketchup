@@ -15,7 +15,7 @@ module HomeCAD
         entity = entry.entity
         next false if type && Scene.type(entity) != type
         next false if !type && %w[Face Edge].include?(Scene.type(entity))
-        next false if !params.fetch('include_hidden', false) && entity.respond_to?(:hidden?) && entity.hidden?
+        next false if !params.fetch('include_hidden', false) && !Serializer.visible?(entity)
         next false if !params.fetch('include_generated', false) && Targeting.metadata(entity)['generated']
 
         true
@@ -48,14 +48,18 @@ module HomeCAD
     end
 
     def self.selection(model, params)
-      check_keys!(params, [])
+      check_keys!(params, %w[limit offset])
+      limit, offset = Scene.page!(params)
       selected = model.selection.to_a
-      entries = []
-      unless selected.empty?
-        Scene.walk(model) { |entry| entries << entry if selected.any? { |entity| entity.equal?(entry.entity) } }
+      selected_ids = selected.map(&:object_id).to_h { |id| [id, true] }
+      entries = Scene.collection(model, context: 'active').select { |entry| selected_ids[entry.entity.object_id] }
+      if entries.length < selected.length
+        entries = []
+        Scene.walk(model) { |entry| entries << entry if selected_ids[entry.entity.object_id] }
       end
-      { 'objects' => entries.map { |entry| Serializer.serialize(entry, level: 'standard') },
-        'total' => entries.length }
+      { 'objects' => entries.slice(offset, limit).to_a.map { |entry| Serializer.serialize(entry, level: 'standard') },
+        'total' => entries.length, 'limit' => limit, 'offset' => offset,
+        'has_more' => offset + limit < entries.length }
     end
 
     def self.page(entries, limit, offset)

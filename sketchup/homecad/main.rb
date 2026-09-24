@@ -16,6 +16,7 @@ Sketchup.require 'homecad/core/scene'
 Sketchup.require 'homecad/core/targeting'
 Sketchup.require 'homecad/core/serializer'
 Sketchup.require 'homecad/core/inspection'
+Sketchup.require 'homecad/core/measurement'
 Sketchup.require 'homecad/runtime/dispatcher'
 Sketchup.require 'homecad/runtime/server'
 

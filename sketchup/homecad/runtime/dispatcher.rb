@@ -19,6 +19,7 @@ module HomeCAD
         when 'find_objects' then Inspection.find(active_model!, params)
         when 'get_object' then Inspection.get(active_model!, params)
         when 'get_selection' then Inspection.selection(active_model!, params)
+        when 'measure' then Measurement.measure(active_model!, params)
         else
           raise BridgeError.new(-32601, 'unsupported_operation', "unknown method: #{method}")
         end

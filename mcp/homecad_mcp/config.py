@@ -9,7 +9,7 @@ class Config:
     host: str = "127.0.0.1"
     port: int = 37941
     timeout: float = 5.0
-    max_frame_bytes: int = 1_048_576
+    max_frame_bytes: int = 16 * 1024 * 1024
 
     @classmethod
     def from_env(cls) -> "Config":

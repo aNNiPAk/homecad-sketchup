@@ -53,7 +53,7 @@ async def test_python_to_ruby_bridge():
 
 
 @pytest.mark.asyncio
-async def test_mcp_stdio_starts_and_lists_only_m0_tools():
+async def test_mcp_stdio_starts_and_lists_m1_tools():
     # No SketchUp process is required to initialize the MCP server.
     params = StdioServerParameters(
         command=sys.executable,
@@ -64,7 +64,9 @@ async def test_mcp_stdio_starts_and_lists_only_m0_tools():
         async with ClientSession(read, write) as session:
             await session.initialize()
             tools = await session.list_tools()
-            assert {tool.name for tool in tools.tools} == {"homecad_status", "get_model_info"}
+            assert {tool.name for tool in tools.tools} == {
+                "homecad_status", "get_model_info", "list_objects", "find_objects",
+                "get_object", "get_selection", "measure", "capture_view", "undo"}
             status = await session.call_tool("homecad_status", {})
             assert not status.isError
             assert json.loads(status.content[0].text)["connection_status"] == "disconnected"

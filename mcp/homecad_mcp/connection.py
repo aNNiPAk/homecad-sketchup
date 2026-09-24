@@ -58,12 +58,13 @@ class BridgeClient:
     def __init__(self, config: Config | None = None):
         self.config = config or Config.from_env()
 
-    async def call(self, method: str) -> dict[str, Any]:
-        if method not in ("homecad_status", "get_model_info"):
+    async def call(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        if method not in ("homecad_status", "get_model_info", "list_objects", "find_objects",
+                          "get_object", "get_selection", "measure", "capture_view", "undo"):
             raise BridgeError("unsupported_operation", f"unsupported method: {method}")
         try:
             async with asyncio.timeout(self.config.timeout):
-                return await self._call(method)
+                return await self._call(method, params or {})
         except TimeoutError as exc:
             raise BridgeError("connection_error", "Timed out waiting for SketchUp bridge") from exc
         except (OSError, asyncio.IncompleteReadError) as exc:
@@ -74,7 +75,7 @@ class BridgeClient:
                 "Open SketchUp and enable the HomeCAD extension; check HOMECAD_PORT.",
             ) from exc
 
-    async def _call(self, method: str) -> dict[str, Any]:
+    async def _call(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         reader, writer = await asyncio.open_connection(self.config.host, self.config.port)
         try:
             await self._send(writer, {
@@ -84,7 +85,7 @@ class BridgeClient:
             hello = check_response(await read_frame(reader, self.config.max_frame_bytes), 1)
             self._check_hello(hello)
             await self._send(writer, {
-                "jsonrpc": "2.0", "id": 2, "method": method, "params": {},
+                "jsonrpc": "2.0", "id": 2, "method": method, "params": params,
             })
             result = check_response(await read_frame(reader, self.config.max_frame_bytes), 2)
             return result

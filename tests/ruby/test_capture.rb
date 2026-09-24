@@ -81,5 +81,8 @@ class CaptureTest < Minitest::Test
     assert_equal 'invalid_request', assert_raises(HomeCAD::Runtime::BridgeError) {
       HomeCAD::Capture.capture(@model, 'view' => 'perspective')
     }.category
+    assert_equal 'invalid_request', assert_raises(HomeCAD::Runtime::BridgeError) {
+      HomeCAD::Capture.capture(@model, 'target' => { 'persistent_id' => 1 }, 'zoom_extents' => true)
+    }.category
   end
 end

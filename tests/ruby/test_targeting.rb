@@ -71,12 +71,17 @@ class TargetingTest < Minitest::Test
     assert_equal [@chair], HomeCAD::Targeting.find(@model, { 'name' => 'hai' }).map(&:entity)
     assert_equal [@chair], HomeCAD::Targeting.find(@model, { 'metadata' => { 'type' => 'furniture' } }).map(&:entity)
     assert_empty HomeCAD::Targeting.find(@model, { 'homecad_type' => 'wall' })
+    @chair.data['room_id'] = 'living'
+    assert_equal [@chair], HomeCAD::Targeting.find(@model, { 'room_id' => 'living' }).map(&:entity)
   end
 
   def test_page_bounds
     assert_equal [100, 0], HomeCAD::Scene.page!('limit' => 100)
     assert_equal 'invalid_request', assert_raises(HomeCAD::Runtime::BridgeError) {
       HomeCAD::Scene.page!('limit' => 101)
+    }.category
+    assert_equal 'invalid_request', assert_raises(HomeCAD::Runtime::BridgeError) {
+      HomeCAD::Scene.page!('offset' => -1)
     }.category
   end
 end

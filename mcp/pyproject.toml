@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "homecad-mcp"
+version = "0.1.0"
+description = "HomeCAD for SketchUp MCP bridge"
+requires-python = ">=3.11"
+dependencies = ["mcp>=1.12,<2"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.24"]
+
+[project.scripts]
+homecad-mcp = "homecad_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["homecad_mcp"]

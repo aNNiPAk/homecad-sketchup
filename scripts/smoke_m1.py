@@ -29,7 +29,7 @@ async def run(name: str, output: Path) -> None:
             status, _ = await call("homecad_status")
             if status["connection_status"] != "connected":
                 raise RuntimeError("Open SketchUp with HomeCAD enabled before running M1 smoke")
-            await call("get_model_info")
+            model_before, _ = await call("get_model_info")
             await call("list_objects", {"limit": 10})
             found, _ = await call("find_objects", {"name": name, "limit": 10})
             if found["resolution"] != "unique":
@@ -61,6 +61,9 @@ async def run(name: str, output: Path) -> None:
                 path = output / f"{view}.png"
                 path.write_bytes(base64.b64decode(image.data, validate=True))
                 print(f"saved: {path.resolve()}")
+            model_after, _ = await call("get_model_info")
+            if model_before["guid"] != model_after["guid"] or model_before["modified"] != model_after["modified"]:
+                raise RuntimeError("Model identity or modified state changed during inspection")
 
 
 def main() -> None:

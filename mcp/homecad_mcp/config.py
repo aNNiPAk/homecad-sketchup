@@ -8,14 +8,14 @@ from dataclasses import dataclass
 class Config:
     host: str = "127.0.0.1"
     port: int = 37941
-    timeout: float = 5.0
+    timeout: float = 30.0
     max_frame_bytes: int = 16 * 1024 * 1024
 
     @classmethod
     def from_env(cls) -> "Config":
         try:
             port = int(os.environ.get("HOMECAD_PORT", "37941"))
-            timeout = float(os.environ.get("HOMECAD_TIMEOUT", "5"))
+            timeout = float(os.environ.get("HOMECAD_TIMEOUT", "30"))
         except ValueError as exc:
             raise ValueError("HOMECAD_PORT must be an integer and HOMECAD_TIMEOUT a number") from exc
         if not 1 <= port <= 65535:

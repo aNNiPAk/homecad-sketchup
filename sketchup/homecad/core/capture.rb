@@ -28,18 +28,35 @@ module HomeCAD
       target = params.key?('target') ? Targeting.resolve_one(model, params['target']) : nil
       view = model.active_view
       original = view.camera.clone
+      before = camera_state(original)
       width, height = image_size(view, max_size)
+      response = nil
       begin
         set_camera(view, name) unless name == 'current'
         view.zoom(target.entity) if target
         view.zoom_extents if zoom
         png = write_png(view, width, height)
-        { 'mime_type' => 'image/png', 'image_base64' => Base64.strict_encode64(png),
-          'view' => name, 'width' => width, 'height' => height,
-          'target' => target && Targeting.identity(target), 'camera_restored' => restore }
+        response = { 'mime_type' => 'image/png', 'image_base64' => Base64.strict_encode64(png),
+                     'view' => name, 'width' => width, 'height' => height,
+                     'target' => target && Targeting.identity(target), 'camera_before' => before }
       ensure
         view.camera = original if restore
+        if response
+          response['camera_after'] = camera_state(view.camera)
+          response['camera_restored'] = restore && response['camera_before'] == response['camera_after']
+        end
       end
+      response
+    end
+
+    def self.camera_state(camera)
+      point = ->(value) { [value.x, value.y, value.z].map { |n| Units.internal_to_mm(n) } }
+      perspective = camera.respond_to?(:perspective?) ? camera.perspective? : nil
+      { 'eye_mm' => point.call(camera.eye), 'target_mm' => point.call(camera.target),
+        'up' => camera.respond_to?(:up) ? [camera.up.x, camera.up.y, camera.up.z] : nil,
+        'perspective' => perspective,
+        'fov' => perspective && camera.respond_to?(:fov) ? camera.fov : nil,
+        'height_mm' => perspective == false && camera.respond_to?(:height) ? Units.internal_to_mm(camera.height) : nil }
     end
 
     def self.image_size(view, max_size)

@@ -1,4 +1,5 @@
 require 'minitest/autorun'
+require File.expand_path('../../sketchup/homecad/core/units', __dir__)
 
 module HomeCAD
   module Runtime
@@ -64,6 +65,7 @@ class CaptureTest < Minitest::Test
     assert_equal 400, result['width']
     assert_equal 300, result['height']
     assert result['camera_restored']
+    assert_equal result['camera_before'], result['camera_after']
   end
 
   def test_exception_restores_camera

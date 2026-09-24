@@ -1,49 +1,72 @@
 # HomeCAD for SketchUp
 
-HomeCAD is an MCP interface for apartment design in SketchUp. M0 provides a read-only bootstrap bridge with exactly two tools: `homecad_status` and `get_model_info`. Geometry and domain objects belong to later milestones in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+HomeCAD is a local MCP interface for inspecting an apartment scene in SketchUp. M1 provides `homecad_status`, `get_model_info`, `list_objects`, `find_objects`, `get_object`, `get_selection`, `measure`, `capture_view`, and `undo`. No drawing or domain creation tools are exposed yet. The roadmap is in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
 ## Requirements
 
-- Windows with SketchUp and its Ruby extension support (runtime validation in SketchUp is still required).
-- [uv](https://docs.astral.sh/uv/) and Python 3.11+ for the MCP server and RBZ builder.
-- Ruby 3.x to run the standalone Ruby tests; SketchUp includes its own Ruby runtime for the installed extension.
+- Windows with SketchUp and Ruby extension support. The installed RBZ must be updated for M1.
+- [uv](https://docs.astral.sh/uv/) with Python 3.11+ for MCP and packaging.
+- Ruby 3.x for standalone Ruby tests; SketchUp supplies its own runtime when the extension is installed.
 
-## Build and install on Windows
+## Build and install
 
-From PowerShell in the repository root:
+From PowerShell in this repository:
 
 ```powershell
 uv sync --project mcp
 uv run --project mcp python scripts/build_rbz.py
 ```
 
-Install `dist\homecad.rbz` through **SketchUp → Extensions → Extension Manager → Install Extension**, then restart SketchUp or enable the extension. The Ruby side starts its loopback listener when the extension loads. The Ruby Console shows `[HomeCAD] INFO listening on 127.0.0.1:37941` if startup succeeds.
+Install `dist\homecad.rbz` with **SketchUp → Extensions → Extension Manager → Install Extension**, then restart SketchUp. The Ruby Console should show `[HomeCAD] INFO listening on 127.0.0.1:37941`. Reinstalling the RBZ is necessary if `homecad_status.ruby_extension_version` still says `0.1.0`.
 
-Run the first MCP smoke test while SketchUp is open:
+The M0 connection check remains available:
 
 ```powershell
 uv run --project mcp python scripts/smoke_mcp.py
 ```
 
-The script starts the Python MCP server over stdio, lists its two tools, calls `homecad_status` and `get_model_info`, and prints their JSON responses. `homecad_status.connection_status` should be `connected`. When SketchUp is absent, status includes an actionable `connection_error` and `get_model_info` returns an MCP tool error.
+To run the complete M1 inspection smoke test, open a model containing a uniquely named Group or ComponentInstance, select an object in SketchUp, then run:
 
-To connect a host such as Codex, configure an MCP stdio server with command `uv` and arguments `run --project D:\GitHub\homecad-sketchup\mcp python -m homecad_mcp` (replace the checkout path if different). The host should then see only `homecad_status` and `get_model_info`.
+```powershell
+uv run --project mcp python scripts/smoke_m1.py --name "Exact known object name"
+```
+
+The script connects, reads model information, lists a bounded page, finds and inspects the named object, measures its dimensions, reads selection, captures top and iso views, and checks that camera state was restored. PNGs are saved under ignored `dist\m1-smoke\`. Use a unique name substring. The script does not invoke `undo` because that would modify the open model's history.
+
+For an MCP host, configure a stdio server with command `uv` and arguments `run --project D:\GitHub\homecad-sketchup\mcp python -m homecad_mcp` (replace the checkout path as needed). The `capture_view` tool returns an MCP `image/png` block alongside JSON metadata, so an image-capable host can display it directly.
+
+## Scene inspection contract
+
+- `list_objects` reads only one collection: root, active edit context, or immediate children of `parent`. Face/Edge topology is omitted unless explicitly filtered by `entity_type`. `limit` is 1–100, `offset` is nonnegative; the response includes `total` and `has_more`.
+- `find_objects` filters by HomeCAD ID, persistent ID, entity ID, SketchUp type, HomeCAD type, name, tag, parent ID, room ID, or existing HomeCAD metadata. It returns `none`, `unique`, `ambiguous`, or `multiple`. `get_object`, `measure`, and targeted capture reject ambiguous targets. For shared component definitions, include the returned `identity.instance_path` when targeting a placement.
+- All entity outputs share the same identity and serializer. `homecad_id` may be null on ordinary SketchUp objects; `persistent_id` and `entity_id` are returned when available. Inspection never assigns HomeCAD metadata to existing entities.
+- `measure` returns a structured kind, targets, value, and unit. Distances and dimensions are mm, area is mm². Bounding boxes are world-aligned; `bbox_distance` is the minimum distance between those boxes, not a mesh collision test.
+- `capture_view` accepts `current`, `top`, `front`, `back`, `left`, `right`, `iso`, plus `zoom_extents`, `target`, `max_size` (64–1600) and `restore_camera` (default true). It includes `camera_before`, `camera_after`, and `camera_restored` in metadata. Target and `zoom_extents` cannot be combined.
+- `undo` queues exactly one native SketchUp Undo action and returns `status: queued`. SketchUp's action API is asynchronous; the response does not claim completion.
+
+The full request and response shape is in [the M1 contract](tests/contracts/m1.md). Design decisions and reviewed reference commits are in [M1 decisions](docs/M1_DECISIONS.md).
 
 ## Configuration
 
 | Variable | Default | Effect |
 | --- | --- | --- |
-| `HOMECAD_PORT` | `37941` | Loopback TCP port; set it for both SketchUp and the MCP process before starting them. |
-| `HOMECAD_TIMEOUT` | `5` | Python end-to-end request timeout in seconds, >0 and <=120. |
-| `HOMECAD_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARN`, or `ERROR`; Python logs to stderr and Ruby logs to its console. |
+| `HOMECAD_PORT` | `37941` | Loopback TCP port. Set for both SketchUp and MCP before starting them. |
+| `HOMECAD_TIMEOUT` | `30` | Python request timeout in seconds, >0 and <=120. |
+| `HOMECAD_LOG_LEVEL` | `INFO` | Python logs to stderr; Ruby logs to its Console. |
 
-The bridge binds only `127.0.0.1`, enforces a 1 MiB frame limit and requires a version handshake. Its tools do not change the active model. Details and reviewed source commits are in [M0 decisions](docs/M0_DECISIONS.md); the exact request envelope is in [the M0 contract](tests/contracts/m0.md).
+The bridge binds only `127.0.0.1`, uses a 16 MiB frame cap for screenshots, and keeps the M0 four-byte framing and protocol version 1 handshake.
 
 ## Tests
 
 ```powershell
 uv run --project mcp --extra dev python -m pytest tests/python -q
-ruby -I sketchup tests/ruby/test_m0.rb
+ruby tests/ruby/test_m0.rb
+ruby tests/ruby/test_targeting.rb
+ruby tests/ruby/test_serializer.rb
+ruby tests/ruby/test_inspection.rb
+ruby tests/ruby/test_measurement.rb
+ruby tests/ruby/test_capture.rb
+ruby tests/ruby/test_undo.rb
 ```
 
-The Python suite includes a real Python-to-Ruby TCP test and an MCP stdio startup test. The Ruby suite uses a small SketchUp stand-in; neither substitutes for the manual SketchUp smoke test.
+The Python suite includes a Python-to-Ruby bridge fixture and an MCP stdio test with image content. Ruby tests use SketchUp API stand-ins. The real SketchUp smoke test above is still required after installing the RBZ.

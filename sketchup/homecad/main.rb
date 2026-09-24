@@ -12,6 +12,8 @@ Sketchup.require 'homecad/runtime/logging'
 Sketchup.require 'homecad/runtime/framing'
 Sketchup.require 'homecad/runtime/operation'
 Sketchup.require 'homecad/core/units'
+Sketchup.require 'homecad/core/scene'
+Sketchup.require 'homecad/core/targeting'
 Sketchup.require 'homecad/runtime/dispatcher'
 Sketchup.require 'homecad/runtime/server'
 

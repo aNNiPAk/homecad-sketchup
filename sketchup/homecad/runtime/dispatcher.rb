@@ -21,6 +21,7 @@ module HomeCAD
         when 'get_selection' then Inspection.selection(active_model!, params)
         when 'measure' then Measurement.measure(active_model!, params)
         when 'capture_view' then Capture.capture(active_model!, params)
+        when 'undo' then undo(active_model!, params)
         else
           raise BridgeError.new(-32601, 'unsupported_operation', "unknown method: #{method}")
         end
@@ -28,6 +29,14 @@ module HomeCAD
 
       def self.empty!(params)
         raise BridgeError.new(-32602, 'invalid_request', 'params must be an empty object') unless params == {}
+      end
+
+      def self.undo(_model, params)
+        empty!(params)
+        accepted = Sketchup.send_action('editUndo:')
+        raise BridgeError.new(-32007, 'undo_unavailable', 'SketchUp did not accept Undo') unless accepted
+
+        { 'status' => 'queued', 'actions' => 1, 'operation' => 'undo' }
       end
 
       def self.validate_request!(request)

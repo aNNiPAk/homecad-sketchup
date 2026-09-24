@@ -17,6 +17,13 @@ module HomeCAD
     end
     def self.invalid!(message) = raise(Runtime::BridgeError.new(-32602, 'invalid_request', message))
   end
+  module Targeting
+    def self.resolve_one(*) = Object.new
+    def self.identity(*) = { 'persistent_id' => 1 }
+  end
+  module Serializer
+    def self.bounds(*) = { 'min' => [254.0, 0.0, 0.0], 'max' => [279.4, 25.4, 25.4] }
+  end
 end
 
 Point = Struct.new(:x, :y, :z) do
@@ -30,19 +37,27 @@ module Geom
 end
 module Sketchup
   class Camera
-    attr_reader :eye, :target
-    attr_accessor :perspective
+    attr_reader :eye, :target, :up
+    attr_accessor :perspective, :height
     def initialize(eye, target, _up)
       @eye = eye
       @target = target
+      @up = _up
+      @perspective = true
+    end
+    def perspective? = @perspective
+    def fov = 35.0
+    def set(eye, target, up)
+      @eye, @target, @up = eye, target, up
     end
   end
 end
-View = Struct.new(:camera, :vpwidth, :vpheight, :fail_capture, keyword_init: true) do
+View = Struct.new(:camera, :vpwidth, :vpheight, :fail_capture, :captured_target, keyword_init: true) do
   def zoom_extents = nil
   def write_image(filename:, **)
     raise 'export failed' if fail_capture
 
+    self.captured_target = camera.target
     File.binwrite(filename, "\x89PNG\r\n\x1A\n".b)
     true
   end
@@ -72,6 +87,13 @@ class CaptureTest < Minitest::Test
     @view.fail_capture = true
     assert_raises(RuntimeError) { HomeCAD::Capture.capture(@model, 'view' => 'iso') }
     assert_equal @original.eye, @view.camera.eye
+  end
+
+  def test_nested_target_centers_world_bounds_and_restores_camera
+    result = HomeCAD::Capture.capture(@model, 'view' => 'top', 'target' => { 'persistent_id' => 1 })
+    assert_in_delta 10.5, @view.captured_target.x, 0.0001
+    assert_equal @original.target, @view.camera.target
+    assert result['camera_restored']
   end
 
   def test_parameter_validation

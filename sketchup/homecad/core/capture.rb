@@ -34,7 +34,7 @@ module HomeCAD
       response = nil
       begin
         set_camera(view, name) unless name == 'current'
-        view.zoom(target.entity) if target
+        focus_target(view, target) if target
         view.zoom_extents if zoom
         png = write_png(view, width, height)
         response = { 'mime_type' => 'image/png', 'image_base64' => Base64.strict_encode64(png),
@@ -80,6 +80,33 @@ module HomeCAD
                               center.z + direction[2] * distance)
       camera = Sketchup::Camera.new(eye, center, Geom::Vector3d.new(*up))
       camera.perspective = false
+      view.camera = camera
+    end
+
+    def self.focus_target(view, entry)
+      box = Serializer.bounds(entry)
+      raise Runtime::BridgeError.new(-32005, 'geometry_error', 'target has no bounds to frame') unless box
+
+      center = (0..2).map { |index| Units.mm_to_internal((box['min'][index] + box['max'][index]) / 2.0) }
+      extents = (0..2).map { |index| Units.mm_to_internal(box['max'][index] - box['min'][index]) }
+      diameter = Math.sqrt(extents.sum { |value| value * value })
+      camera = view.camera
+      vector = [camera.eye.x - camera.target.x, camera.eye.y - camera.target.y,
+                camera.eye.z - camera.target.z]
+      length = Math.sqrt(vector.sum { |value| value * value })
+      vector = [1, -1, 1] if length < 0.0001
+      length = Math.sqrt(vector.sum { |value| value * value })
+      if camera.perspective?
+        aspect = view.vpwidth.to_f / view.vpheight
+        narrow_factor = [aspect, 1.0 / aspect, 1.0].min
+        half_angle = camera.fov * narrow_factor * Math::PI / 360.0
+        distance = [diameter * 0.75 / Math.tan(half_angle), 1.0].max
+      else
+        camera.height = [diameter * 1.5, 1.0].max
+        distance = [length, diameter * 2.0, 1.0].max
+      end
+      eye = (0..2).map { |index| center[index] + vector[index] / length * distance }
+      camera.set(Geom::Point3d.new(*eye), Geom::Point3d.new(*center), camera.up)
       view.camera = camera
     end
 

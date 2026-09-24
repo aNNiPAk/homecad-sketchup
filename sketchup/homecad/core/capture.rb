@@ -30,6 +30,7 @@ module HomeCAD
       original = view.camera.clone
       before = camera_state(original)
       width, height = image_size(view, max_size)
+      changed = name != 'current' || !target.nil? || zoom
       response = nil
       begin
         set_camera(view, name) unless name == 'current'
@@ -40,7 +41,7 @@ module HomeCAD
                      'view' => name, 'width' => width, 'height' => height,
                      'target' => target && Targeting.identity(target), 'camera_before' => before }
       ensure
-        view.camera = original if restore
+        view.camera = original if restore && changed
         if response
           response['camera_after'] = camera_state(view.camera)
           response['camera_restored'] = restore && response['camera_before'] == response['camera_after']

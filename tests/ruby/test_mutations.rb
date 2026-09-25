@@ -159,7 +159,7 @@ module Sketchup
     end
     def union(_other) = MutationBoolean.make_result(model)
     def intersect(_other) = MutationBoolean.make_result(model)
-    def split(other) = MutationBoolean.split(self, other)
+    def subtract(other) = MutationBoolean.subtract(self, other)
   end
   class ComponentInstance < Group; end
   class Face < MutationEntity
@@ -226,24 +226,23 @@ end
 
 module MutationBoolean
   class << self
-    attr_accessor :receiver, :argument, :fail_split
+    attr_accessor :receiver, :argument, :fail_subtract
     def make_result(model)
       self.receiver ||= nil
       model.entities.add_group.tap { |group| group.add_points([Geom::Point3d.new(0, 0, 0), Geom::Point3d.new(1, 1, 1)]) }
     end
 
-    # Match documented SketchUp ordering: [other - self, self - other, intersection].
-    def split(target, tool)
-      return nil if fail_split
-      target_bounds, tool_bounds = target.bounds, tool.bounds
+    # The documented parameter contract says receiver is removed from the
+    # argument. Model that direction so the call order is tested explicitly.
+    def subtract(receiver, argument)
+      return nil if fail_subtract
+      target_bounds, tool_bounds = argument.bounds, receiver.bounds
       target_min, target_max = target_bounds.min, target_bounds.max
       tool_min, tool_max = tool_bounds.min, tool_bounds.max
-      diff2 = box(target.model, [target_max.x, target_min.y, target_min.z], [tool_max.x, target_max.y, target_max.z])
-      diff1 = box(target.model, [target_min.x, target_min.y, target_min.z], [tool_min.x, target_max.y, target_max.z])
-      intersection = box(target.model, [tool_min.x, target_min.y, target_min.z], [target_max.x, target_max.y, target_max.z])
-      target.erase!
-      tool.erase!
-      self.receiver = [diff2, diff1, intersection]
+      result = box(argument.model, [target_min.x, target_min.y, target_min.z], [tool_min.x, target_max.y, target_max.z])
+      receiver.erase!
+      argument.erase!
+      self.receiver = result
     end
 
     def box(model, minimum, maximum)
@@ -271,7 +270,7 @@ class MutationsTest < Minitest::Test
     @model = Sketchup::Model.new
     Sketchup.active_model = @model
     MutationBoolean.receiver = nil
-    MutationBoolean.fail_split = false
+    MutationBoolean.fail_subtract = false
     @group = @model.entities.add_group
     HomeCAD::Metadata.create!(@group, type: 'primitive.box')
     @group.add_points([Geom::Point3d.new(0, 0, 0), Geom::Point3d.new(100.0 / 25.4, 100.0 / 25.4, 0)])
@@ -437,7 +436,7 @@ class MutationsTest < Minitest::Test
     assert_empty @model.events
   end
 
-  def test_boolean_difference_selects_target_minus_tool_from_documented_split_order
+  def test_boolean_difference_uses_argument_minus_receiver_for_target_minus_tool
     target = @group
     target.replace_points([Geom::Point3d.new(0, 0, 0), Geom::Point3d.new(600.0 / 25.4, 400.0 / 25.4, 300.0 / 25.4)])
     tool = @model.entities.add_group
@@ -461,7 +460,7 @@ class MutationsTest < Minitest::Test
     assert_in_delta 300, boolean_result.dig('bbox_dimensions_mm', 'width'), 1e-6
     assert_in_delta 0, boolean_result.dig('bbox_mm', 'min', 0), 1e-6
     assert_equal 3, @model.entities.length, 'only the two sources and selected result remain'
-    assert_equal 3, MutationBoolean.receiver.length
+    assert_equal boolean_result['persistent_id'], MutationBoolean.receiver.persistent_id
   end
 
   def test_union_and_intersect_remain_available_and_boolean_failure_aborts
@@ -484,7 +483,7 @@ class MutationsTest < Minitest::Test
     assert tool.valid?
 
     before = @model.entities.dup
-    MutationBoolean.fail_split = true
+    MutationBoolean.fail_subtract = true
     error = assert_raises(HomeCAD::Runtime::BridgeError) do
       HomeCAD::Mutations.boolean_operation(@model,
         'target' => { 'homecad_id' => HomeCAD::Metadata.read(@group)['homecad_id'] },

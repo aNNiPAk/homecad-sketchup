@@ -108,7 +108,7 @@ module HomeCAD
       end
       require_solid!(target, 'target')
       require_solid!(tool, 'tool')
-      method = { 'union' => :union, 'difference' => :split, 'intersect' => :intersect }.fetch(operation)
+      method = { 'union' => :union, 'difference' => :subtract, 'intersect' => :intersect }.fetch(operation)
       unless target.respond_to?(method) && tool.respond_to?(method)
         raise Runtime::BridgeError.new(-32601, 'unsupported_operation', "SketchUp does not support #{operation}")
       end
@@ -120,21 +120,14 @@ module HomeCAD
           tool_copy = entities.add_instance(tool.definition, tool.transformation)
           Primitives.geometry_created!(target_copy, 'Could not copy boolean target')
           Primitives.geometry_created!(tool_copy, 'Could not copy boolean tool')
-          if operation == 'difference'
-            split = target_copy.split(tool_copy)
-            unless split.is_a?(Array) && split.length == 3
-              Primitives.geometry_error!('SketchUp split failed; both operands must be manifold solids')
-            end
-            # Documented order: [other - self, self - other, intersection].
-            result = split[1]
-            split.each_with_index do |part, index|
-              next if index == 1 || !part
-
-              part.erase! if part.respond_to?(:valid?) && part.valid?
-            end
-          else
-            result = target_copy.public_send(method, tool_copy)
-          end
+          # SketchUp's subtract parameter docs describe the argument as the
+          # destination to subtract this receiver from. Use tool as receiver
+          # and target as argument to obtain target - tool (verified in SU 26).
+          result = if operation == 'difference'
+                     tool_copy.subtract(target_copy)
+                   else
+                     target_copy.public_send(method, tool_copy)
+                   end
           Primitives.geometry_error!("SketchUp #{operation} failed; both operands must be manifold solids") unless result
           Primitives.geometry_created!(result, "SketchUp #{operation} returned an invalid result")
           target_copy.erase! if target_copy.valid? && !target_copy.equal?(result)

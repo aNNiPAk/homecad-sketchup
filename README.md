@@ -17,7 +17,7 @@ uv sync --project mcp
 uv run --project mcp python scripts/build_rbz.py
 ```
 
-Install `dist\homecad.rbz` with **SketchUp → Extensions → Extension Manager → Install Extension**, then restart SketchUp. The Ruby Console should show `[HomeCAD] INFO listening on 127.0.0.1:37941`. Reinstalling the RBZ is necessary if `homecad_status.ruby_extension_version` still says `0.1.0`.
+Install `dist\homecad.rbz` with **SketchUp → Extensions → Extension Manager → Install Extension**, then restart SketchUp. The Ruby Console should show `[HomeCAD] INFO listening on 127.0.0.1:37941`. Confirm that `homecad_status.ruby_extension_version` says `0.2.1`; an earlier version still has the camera restoration bug.
 
 The M0 connection check remains available:
 
@@ -25,13 +25,13 @@ The M0 connection check remains available:
 uv run --project mcp python scripts/smoke_mcp.py
 ```
 
-To run the complete M1 inspection smoke test, open a model containing a uniquely named Group or ComponentInstance, select an object in SketchUp, then run:
+To run the complete M1 inspection smoke test, select exactly one Group or ComponentInstance in SketchUp, then run:
 
 ```powershell
-uv run --project mcp python scripts/smoke_m1.py --name "Exact known object name"
+uv run --project mcp python scripts/smoke_m1.py
 ```
 
-The script connects, reads model information, lists a bounded page, finds and inspects the named object, measures its dimensions, reads selection, captures top and iso views, and checks that camera state was restored. PNGs are saved under ignored `dist\m1-smoke\`. Use a unique name substring. The script does not invoke `undo` because that would modify the open model's history.
+The script connects, reads model information, lists a bounded page, finds and inspects the selected object, measures its dimensions, reads selection, captures top and iso views, then rereads the camera after each capture. PNGs are saved under ignored `dist\m1-smoke\`. `--name "Exact known object name"` is optional; if it has no match, the script explicitly falls back to the single selected object. Ambiguous names produce a short error. The script does not invoke `undo` because that would modify the open model's history.
 
 For an MCP host, configure a stdio server with command `uv` and arguments `run --project D:\GitHub\homecad-sketchup\mcp python -m homecad_mcp` (replace the checkout path as needed). The `capture_view` tool returns an MCP `image/png` block alongside JSON metadata, so an image-capable host can display it directly.
 

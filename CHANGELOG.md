@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- Capture now reconstructs an independent camera snapshot before changing the view, restores it without a transition, and frames model bounds without invoking `View#zoom_extents`.
+- The M1 smoke script can use a single selected unnamed object when `--name` is absent or has no match, and reports expected errors without an `ExceptionGroup` traceback.
+
 ### Added
 
 - M1 Scene Inspection: bounded `list_objects`, explicit `find_objects` resolution, normalized `get_object` and `get_selection`, and structured `measure`.

@@ -131,6 +131,75 @@ class FurnitureTest < Minitest::Test
     assert_equal 2, HomeCAD::Metadata.read(cabinet)['revision']
   end
 
+  def test_same_transform_wall_to_world_detach_changes_revision_and_clears_projection
+    wall_id = create_wall
+    created = HomeCAD::Furniture.create_cabinet(@model, 'width_mm' => 600, 'depth_mm' => 560,
+      'height_mm' => 720, 'placement' => { 'mode' => 'wall', 'wall_id' => wall_id,
+      'offset_mm' => 1000, 'bottom_mm' => 0, 'side' => 'positive_v', 'clearance_mm' => 0 })
+    cabinet_id = created.dig('created', 0, 'identity', 'homecad_id')
+    cabinet = @model.entities.find { |entity| HomeCAD::Metadata.read(entity)['homecad_id'] == cabinet_id }
+    before_transform = cabinet.transformation.to_a
+    children = cabinet.entities.map(&:object_id)
+    frame = HomeCAD::Furniture.get_frame(@model, 'target' => { 'homecad_id' => cabinet_id })
+    result = HomeCAD::Furniture.update_object(@model, 'target' => { 'homecad_id' => cabinet_id },
+      'changes' => { 'placement' => { 'mode' => 'world', 'origin_mm' => frame['origin_mm'],
+        'rotation_degrees' => 0 } })
+
+    assert_equal before_transform, cabinet.transformation.to_a
+    assert_equal 'world', HomeCAD::FurnitureData.read_params(cabinet).dig('placement', 'mode')
+    assert_empty HomeCAD::FurnitureData.read_relationships(cabinet)
+    assert_nil HomeCAD::WallAttachment.read(cabinet)
+    refute HomeCAD::Metadata.read(cabinet).key?('wall_id')
+    assert_empty HomeCAD::WallAttachment.dependents_for(@model, wall_id)
+    assert_equal children, cabinet.entities.map(&:object_id)
+    assert_equal 2, HomeCAD::Metadata.read(cabinet)['revision']
+    assert_equal 2, result['revision']
+    HomeCAD::Architecture.delete_object(@model, 'target' => { 'homecad_id' => wall_id }, 'cascade' => false)
+  end
+
+  def test_same_transform_wall_reattach_transfers_dependency_and_increments_revision
+    wall_a = create_wall
+    wall_b = HomeCAD::Architecture.create_wall(@model, 'start_mm' => [0, 0, 0], 'end_mm' => [4000, 0, 0],
+      'thickness_mm' => 120, 'height_mm' => 2700).dig('created', 0, 'identity', 'homecad_id')
+    created = HomeCAD::Furniture.create_cabinet(@model, 'width_mm' => 600, 'depth_mm' => 560,
+      'height_mm' => 720, 'placement' => { 'mode' => 'wall', 'wall_id' => wall_a,
+      'offset_mm' => 1000, 'bottom_mm' => 0, 'side' => 'positive_v', 'clearance_mm' => 0 })
+    cabinet_id = created.dig('created', 0, 'identity', 'homecad_id')
+    cabinet = @model.entities.find { |entity| HomeCAD::Metadata.read(entity)['homecad_id'] == cabinet_id }
+    before_transform = cabinet.transformation.to_a
+    children = cabinet.entities.map(&:object_id)
+    result = HomeCAD::Furniture.update_object(@model, 'target' => { 'homecad_id' => cabinet_id },
+      'changes' => { 'placement' => { 'mode' => 'wall', 'wall_id' => wall_b,
+        'offset_mm' => 1000, 'bottom_mm' => 0, 'side' => 'positive_v', 'clearance_mm' => 0 } })
+
+    assert_equal before_transform, cabinet.transformation.to_a
+    assert_equal wall_b, HomeCAD::FurnitureData.read_relationships(cabinet)['wall_id']
+    assert_equal wall_b, HomeCAD::WallAttachment.read(cabinet)['wall_id']
+    assert_empty HomeCAD::WallAttachment.dependents_for(@model, wall_a)
+    assert_equal [cabinet], HomeCAD::WallAttachment.dependents_for(@model, wall_b)
+    assert_equal children, cabinet.entities.map(&:object_id)
+    assert_equal 2, HomeCAD::Metadata.read(cabinet)['revision']
+    assert_equal 2, result['revision']
+    HomeCAD::Architecture.delete_object(@model, 'target' => { 'homecad_id' => wall_a }, 'cascade' => false)
+    assert_raises(HomeCAD::Runtime::BridgeError) do
+      HomeCAD::Architecture.delete_object(@model, 'target' => { 'homecad_id' => wall_b }, 'cascade' => false)
+    end
+  end
+
+  def test_canonical_noop_does_not_open_operation_or_increment_revision
+    created = HomeCAD::Furniture.create_cabinet(@model, 'width_mm' => 600, 'depth_mm' => 560,
+      'height_mm' => 720)
+    cabinet_id = created.dig('created', 0, 'identity', 'homecad_id')
+    cabinet = @model.entities.find { |entity| HomeCAD::Metadata.read(entity)['homecad_id'] == cabinet_id }
+    before_operations = @model.events.count { |event| event.first == :start }
+    children = cabinet.entities.map(&:object_id)
+    result = HomeCAD::Furniture.update_object(@model, 'target' => { 'homecad_id' => cabinet_id },
+      'changes' => { 'width_mm' => 600, 'name' => 'Cabinet' })
+    assert_equal 1, result['revision']
+    assert_equal before_operations, @model.events.count { |event| event.first == :start }
+    assert_equal children, cabinet.entities.map(&:object_id)
+  end
+
   def test_wall_shorten_and_height_rejections_are_preflighted
     wall_id = create_wall
     created = HomeCAD::Furniture.create_cabinet(@model, 'width_mm' => 600, 'depth_mm' => 560,

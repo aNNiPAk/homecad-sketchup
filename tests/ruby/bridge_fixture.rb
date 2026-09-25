@@ -152,6 +152,11 @@ class FixtureEntity
   def set_bounds(bounds) = (@bounds = bounds)
   def attribute_dictionary(name, _create = false) = @metadata[name]
   def set_attribute(dictionary, key, value) = (@metadata[dictionary] ||= {})[key] = value
+  def delete_attribute(dictionary, key)
+    return false unless @metadata[dictionary]
+
+    !@metadata[dictionary].delete(key).nil?
+  end
   def valid? = @valid
   def deleted? = !@valid
   def locked? = @locked

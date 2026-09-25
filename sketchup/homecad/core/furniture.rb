@@ -345,6 +345,9 @@ module HomeCAD
       old_frame = frame_for(model, current)
       old_transform = transformation(old_frame)
       placement_changed = !WallAttachment.transformations_equal?(old_transform, new_transform)
+      domain_state_changed = FurnitureData.canonical(current) != FurnitureData.canonical(proposed)
+      return mutation_result('update_furniture_object', updated: [entity], revision: Metadata.read(entity)['revision']) unless domain_state_changed
+
       geometry_changed = %w[width_mm depth_mm height_mm panel_thickness_mm back_thickness_mm shelf_z_mm fronts detail_level].any? do |key|
         current[key] != proposed[key]
       end
@@ -352,8 +355,8 @@ module HomeCAD
         FurnitureData.write(entity, params: proposed)
         entity.transformation = new_transform if placement_changed
         build_geometry!(entity, proposed) if geometry_changed
-        entity.name = proposed['name']
-        Metadata.increment_revision!(entity) if geometry_changed || placement_changed || current['name'] != proposed['name']
+        entity.name = proposed['name'] if current['name'] != proposed['name']
+        Metadata.increment_revision!(entity)
         mutation_result('update_furniture_object', updated: [entity], revision: Metadata.read(entity)['revision'])
       end
     rescue Runtime::BridgeError then raise

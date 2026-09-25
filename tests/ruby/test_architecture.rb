@@ -49,6 +49,11 @@ module Sketchup
     def erase! = (@valid = false)
     def attribute_dictionary(key, _create = false) = @attributes[key]
     def set_attribute(dictionary, key, value) = (@attributes[dictionary] ||= {})[key] = value
+    def delete_attribute(dictionary, key)
+      return false unless @attributes[dictionary]
+
+      !@attributes[dictionary].delete(key).nil?
+    end
     def hidden? = false
     def visible? = true
     def locked? = false

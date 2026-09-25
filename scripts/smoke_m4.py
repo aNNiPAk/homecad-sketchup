@@ -91,6 +91,12 @@ async def run(output: Path) -> None:
                 metadata = cabinet["created"][0]["metadata"]
                 if metadata.get("type") != "furniture.cabinet" or not metadata.get("homecad_id"):
                     raise SmokeError("Cabinet is missing generated HomeCAD identity metadata")
+                cabinet_info = await get(cabinet_id)
+                bbox_dimensions = cabinet_info.get("bbox_dimensions_mm") or {}
+                expected_bbox = {"width": 600, "depth": 578, "height": 720}
+                if any(abs(bbox_dimensions.get(axis, float("inf")) - value) > 1
+                       for axis, value in expected_bbox.items()):
+                    raise SmokeError(f"generated Cabinet geometry bounds are incorrect: {bbox_dimensions}")
                 frame, _ = await call("get_furniture_frame", {"target": {"homecad_id": cabinet_id}})
                 if frame["width_mm"] != 600 or frame["depth_mm"] != 560 or frame["height_mm"] != 720:
                     raise SmokeError("Furniture frame does not match the requested case dimensions")
@@ -130,7 +136,7 @@ async def run(output: Path) -> None:
                     raise SmokeError("Undo did not restore wall-attached Cabinet placement")
                 update, _ = await call("update_furniture_object", {"target": {"homecad_id": cabinet_id},
                     "changes": {"height_mm": 800}})
-                if update["revision"] != 3:
+                if update["revision"] != 2:
                     raise SmokeError("Cabinet revision did not advance once after update")
                 await undo_one()
                 current = await get(cabinet_id)

@@ -39,6 +39,10 @@ class FurnitureTest < Minitest::Test
     assert_equal 'furniture.cabinet', HomeCAD::Metadata.read(group)['type']
     assert_equal 1, HomeCAD::Metadata.read(group)['revision']
     assert_equal 8, group.entities.length
+    right_side = group.entities.find { |part| part.name == 'right_side' }
+    shelf = group.entities.find { |part| part.name == 'shelf:0' }
+    assert_point_bounds([782, 0, 0], [800, 600, 2100], right_side)
+    assert_point_bounds([18, 4, 500], [782, 600, 518], shelf)
     assert_equal 8, HomeCAD::Furniture.list_parts(@model, 'target' => { 'homecad_id' => cabinet_id })['count']
     before = @model.events.count { |event| event.first == :start }
     update = HomeCAD::Furniture.update_object(@model, 'target' => { 'homecad_id' => cabinet_id },
@@ -46,6 +50,16 @@ class FurnitureTest < Minitest::Test
     assert_equal cabinet_id, update.dig('updated', 0, 'identity', 'homecad_id')
     assert_equal 2, HomeCAD::Metadata.read(group)['revision']
     assert_equal before + 1, @model.events.count { |event| event.first == :start }
+  end
+
+  def assert_point_bounds(min_mm, max_mm, entity)
+    box = entity.bounds
+    actual_min = box.corner(0)
+    actual_max = box.corner(7)
+    min_values = [actual_min.x, actual_min.y, actual_min.z].map { |value| HomeCAD::Units.internal_to_mm(value) }
+    max_values = [actual_max.x, actual_max.y, actual_max.z].map { |value| HomeCAD::Units.internal_to_mm(value) }
+    min_mm.zip(min_values).each { |expected, actual| assert_in_delta expected, actual, 0.01 }
+    max_mm.zip(max_values).each { |expected, actual| assert_in_delta expected, actual, 0.01 }
   end
 
   def test_invalid_front_rejected_before_operation

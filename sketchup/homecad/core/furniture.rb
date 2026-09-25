@@ -265,12 +265,14 @@ module HomeCAD
       if part['part_key'].end_with?('_side')
         # Side panel plane is X/Z; its depth dimension occupies local Y.
         sx, sy, sz = part['thickness_mm'], part['width_mm'], part['height_mm']
-        x = part['part_key'] == 'right_side' ? root_width(root) - part['thickness_mm'] : 0.0
+        x = part['part_key'] == 'right_side' ? root_width_mm(root) - part['thickness_mm'] : 0.0
         y = 0.0; z = 0.0
       elsif part['part_key'] == 'bottom' || part['part_key'] == 'top'
         sx, sy, sz = part['width_mm'], part['height_mm'], part['thickness_mm']
       elsif part['part_key'] == 'back'
         sx, sy, sz = part['width_mm'], part['thickness_mm'], part['height_mm']
+      elsif part['part_kind'] == 'shelf'
+        sx, sy, sz = part['width_mm'], part['height_mm'], part['thickness_mm']
       else
         sx, sy, sz = part['width_mm'], part['thickness_mm'], part['height_mm']
       end
@@ -284,9 +286,9 @@ module HomeCAD
       collection
     end
 
-    def self.root_width(root)
+    def self.root_width_mm(root)
       params = FurnitureData.read_params(root)
-      Units.mm_to_internal(params.fetch('width_mm', 0))
+      params.fetch('width_mm', 0).to_f
     end
 
     def self.get_frame(model, params)

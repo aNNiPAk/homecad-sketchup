@@ -176,6 +176,80 @@ async def run(output: Path) -> None:
                     raise SmokeError("Room lost its ordered boundary or room-side assignments")
                 await screenshot("room-top", room_id, "top")
 
+                def assert_room_consistent(room_data: dict, expected_walls: list[str]) -> None:
+                    room_params = room_data["parameters"]
+                    if room_params["wall_ids"] != expected_walls:
+                        raise SmokeError("Room wall_ids do not match the expected ordered boundary")
+                    expected_relationships = {
+                        f"wall_{wall_id}": side for wall_id, side in room_params["room_sides"]
+                    }
+                    if room_data["relationships"] != expected_relationships:
+                        raise SmokeError("Room relationships are stale relative to room_sides")
+                    if len(room_params["boundary_mm"]) != len(expected_walls):
+                        raise SmokeError("Room boundary vertex count does not match wall count")
+                    if room_params["approx_area_mm2"] <= 0:
+                        raise SmokeError("Room derived area must be positive")
+
+                room_before = room_info
+                replacement_walls = [
+                    await create_wall([20000, 0, 0], [25000, 0, 0], "M3 Room Replacement South"),
+                    await create_wall([25000, 0, 0], [25000, 2000, 0], "M3 Room Replacement East"),
+                    await create_wall([25000, 2000, 0], [20000, 2000, 0], "M3 Room Replacement North"),
+                    await create_wall([20000, 2000, 0], [20000, 0, 0], "M3 Room Replacement West"),
+                ]
+                await call("update_architecture_object", {
+                    "target": {"homecad_id": room_id}, "changes": {"wall_ids": replacement_walls}
+                })
+                room_changed = await get(room_id)
+                assert_room_consistent(room_changed, replacement_walls)
+                expected_boundary = [[20000, 0, 0], [25000, 0, 0], [25000, 2000, 0], [20000, 2000, 0]]
+                if room_changed["parameters"]["boundary_mm"] != expected_boundary:
+                    raise SmokeError("Room boundary_mm was not regenerated from replacement walls")
+                if abs(room_changed["parameters"]["approx_area_mm2"] - 10_000_000) > 1:
+                    raise SmokeError("Room area was not regenerated from replacement boundary")
+                dimensions = room_changed["bbox_dimensions_mm"]
+                if abs(dimensions["width"] - 5000) > 1 or abs(dimensions["depth"] - 2000) > 1:
+                    raise SmokeError("Generated Room reference face does not match the replacement boundary")
+                if room_changed["metadata"]["revision"] != room_before["metadata"]["revision"] + 1:
+                    raise SmokeError("Room wall_ids update did not increment its revision exactly once")
+                await screenshot("room-reassigned", room_id, "top")
+                await undo_one()
+                room_restored = await get(room_id)
+                if (room_restored["parameters"] != room_before["parameters"] or
+                        room_restored["relationships"] != room_before["relationships"] or
+                        room_restored["metadata"]["revision"] != room_before["metadata"]["revision"]):
+                    raise SmokeError("Undo did not restore the prior Room derived state")
+
+                room_before_reverse = room_restored
+                first_wall_before = await get(room_walls[0])
+                await call("update_architecture_object", {
+                    "target": {"homecad_id": room_walls[0]},
+                    "changes": {"start_mm": [14000, 0, 0], "end_mm": [10000, 0, 0]},
+                })
+                room_reversed = await get(room_id)
+                assert_room_consistent(room_reversed, room_walls)
+                old_boundary = room_before_reverse["parameters"]["boundary_mm"]
+                old_area = room_before_reverse["parameters"]["approx_area_mm2"]
+                old_sides = dict(room_before_reverse["parameters"]["room_sides"])
+                new_sides = dict(room_reversed["parameters"]["room_sides"])
+                if room_reversed["parameters"]["boundary_mm"] != old_boundary:
+                    raise SmokeError("Reversing wall direction changed the physical Room boundary")
+                if room_reversed["parameters"]["approx_area_mm2"] != old_area:
+                    raise SmokeError("Reversing wall direction changed Room area")
+                if old_sides[room_walls[0]] == new_sides[room_walls[0]]:
+                    raise SmokeError("Reversing wall direction did not update the Room-facing side")
+                if room_reversed["metadata"]["revision"] != room_before_reverse["metadata"]["revision"] + 1:
+                    raise SmokeError("Dependent Room revision did not increment exactly once")
+                reversed_wall = await get(room_walls[0])
+                if reversed_wall["metadata"]["revision"] != first_wall_before["metadata"]["revision"] + 1:
+                    raise SmokeError("Reversed Wall revision did not increment exactly once")
+                await screenshot("room-wall-direction", room_id, "top")
+                await undo_one()
+                room_restored = await get(room_id)
+                if (room_restored["parameters"] != room_before_reverse["parameters"] or
+                        room_restored["relationships"] != room_before_reverse["relationships"]):
+                    raise SmokeError("Undo did not restore Room side relationships after Wall reversal")
+
             try:
                 await run_steps()
             finally:

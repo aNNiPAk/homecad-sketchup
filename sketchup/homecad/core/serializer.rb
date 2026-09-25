@@ -31,6 +31,10 @@ module HomeCAD
       result.merge!('metadata' => safe_value(data),
                     'transformation' => transformation(entry),
                     'children' => child_summary(entity))
+      if data['type'].to_s.start_with?('architecture.') && defined?(ArchitectureData)
+        result['parameters'] = safe_value(ArchitectureData.read_params(entity))
+        result['relationships'] = safe_value(ArchitectureData.read_relationships(entity))
+      end
       result
     end
 

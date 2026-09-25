@@ -33,6 +33,17 @@ METHOD_CAPABILITIES = {
     "follow_me": "geometry.primitive.v1",
     "transform_object": "geometry.primitive.v1",
     "boolean_operation": "geometry.primitive.v1",
+    "get_wall_frame": "architecture.core.v1",
+    "create_wall": "architecture.core.v1",
+    "create_opening": "architecture.core.v1",
+    "create_door": "architecture.core.v1",
+    "create_window": "architecture.core.v1",
+    "create_niche": "architecture.core.v1",
+    "create_column": "architecture.core.v1",
+    "update_architecture_object": "architecture.core.v1",
+    "delete_architecture_object": "architecture.core.v1",
+    "create_room": "architecture.core.v1",
+    "detect_rooms": "architecture.core.v1",
 }
 
 
@@ -85,7 +96,11 @@ class BridgeClient:
                           "get_object", "get_selection", "measure", "capture_view", "undo",
                           "create_group", "create_face", "create_edge", "create_box",
                           "create_circle", "create_arc", "create_polygon", "push_pull",
-                          "follow_me", "transform_object", "boolean_operation"):
+                          "follow_me", "transform_object", "boolean_operation",
+                          "get_wall_frame", "create_wall", "create_opening", "create_door",
+                          "create_window", "create_niche", "create_column",
+                          "update_architecture_object", "delete_architecture_object",
+                          "create_room", "detect_rooms"):
             raise BridgeError("unsupported_operation", f"unsupported method: {method}")
         try:
             async with asyncio.timeout(self.config.timeout):

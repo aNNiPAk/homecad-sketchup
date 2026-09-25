@@ -136,7 +136,66 @@ async def test_m2_create_box_find_get_transform_get_cross_language():
 
 
 @pytest.mark.asyncio
-async def test_mcp_stdio_starts_and_lists_m1_tools():
+async def test_m3_wall_window_update_delete_cross_language():
+    ruby = shutil.which("ruby")
+    if ruby is None:
+        pytest.skip("Ruby executable unavailable")
+    process = await asyncio.create_subprocess_exec(
+        ruby, "tests/ruby/bridge_fixture.rb", cwd=ROOT,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        port = int(await asyncio.wait_for(process.stdout.readline(), 5))
+        client = BridgeClient(Config(port=port))
+        status = await client.call("homecad_status")
+        assert "architecture.core.v1" in status["capabilities"]
+        wall_result = await client.call("create_wall", {
+            "start_mm": [0, 0, 0], "end_mm": [4000, 0, 0],
+            "thickness_mm": 120, "height_mm": 2700,
+        })
+        wall_id = wall_result["created"][0]["identity"]["homecad_id"]
+        frame = await client.call("get_wall_frame", {"wall": {"homecad_id": wall_id}})
+        assert frame["u_axis"] == pytest.approx([1, 0, 0])
+        window = await client.call("create_window", {
+            "wall": {"homecad_id": wall_id}, "offset_mm": 1000, "bottom_mm": 900,
+            "width_mm": 1200, "height_mm": 1200,
+        })
+        window_id = window["created"][0]["identity"]["homecad_id"]
+        info = await client.call("get_object", {"target": {"homecad_id": window_id}})
+        assert info["metadata"]["type"] == "architecture.window"
+        assert info["parameters"]["offset_mm"] == 1000
+        updated = await client.call("update_architecture_object", {
+            "target": {"homecad_id": wall_id},
+            "changes": {"start_mm": [100, 200, 0], "end_mm": [100, 4200, 0]},
+        })
+        assert updated["revision"] == 3
+        moved_frame = await client.call("get_wall_frame", {"wall": {"homecad_id": wall_id}})
+        assert moved_frame["u_axis"] == pytest.approx([0, 1, 0])
+        still_hosted = await client.call("get_object", {"target": {"homecad_id": window_id}})
+        assert still_hosted["parameters"]["offset_mm"] == 1000
+        deleted = await client.call("delete_architecture_object", {
+            "target": {"homecad_id": window_id}, "cascade": False,
+        })
+        assert deleted["deleted"][0]["metadata"]["type"] == "architecture.window"
+        with pytest.raises(BridgeError) as missing:
+            await client.call("get_object", {"target": {"homecad_id": window_id}})
+        assert missing.value.category == "target_not_found"
+    finally:
+        process.terminate()
+        await process.wait()
+
+
+def test_m3_smoke_requires_disposable_model_confirmation():
+    result = __import__("subprocess").run(
+        [sys.executable, "scripts/smoke_m3.py"], cwd=ROOT,
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 2
+    assert "--confirm-disposable" in result.stderr
+
+
+@pytest.mark.asyncio
+async def test_mcp_stdio_starts_and_lists_supported_tools():
     # No SketchUp process is required to initialize the MCP server.
     params = StdioServerParameters(
         command=sys.executable,
@@ -152,7 +211,10 @@ async def test_mcp_stdio_starts_and_lists_m1_tools():
                 "get_object", "get_selection", "measure", "capture_view", "undo",
                 "create_group", "create_face", "create_edge", "create_box", "create_circle",
                 "create_arc", "create_polygon", "push_pull", "follow_me", "transform_object",
-                "boolean_operation"}
+                "boolean_operation", "get_wall_frame", "create_wall", "create_opening",
+                "create_door", "create_window", "create_niche", "create_column",
+                "update_architecture_object", "delete_architecture_object", "create_room",
+                "detect_rooms"}
             status = await session.call_tool("homecad_status", {})
             assert not status.isError
             assert json.loads(status.content[0].text)["connection_status"] == "disconnected"

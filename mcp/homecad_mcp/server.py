@@ -240,6 +240,107 @@ async def boolean_operation(target: dict, tool: dict, operation: str) -> dict:
                                                     "operation": operation})
 
 
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def get_wall_frame(wall: dict) -> dict:
+    """Read a Wall's world origin and stable local U/V/Z frame."""
+    return await _scene_call("get_wall_frame", {"wall": wall})
+
+
+@mcp.tool(annotations=CREATE_TOOL)
+async def create_wall(start_mm: list[float], end_mm: list[float], thickness_mm: float,
+                      height_mm: float, name: str | None = None) -> dict:
+    """Create a generated vertical wall from world-coordinate millimeter parameters."""
+    params = {"start_mm": start_mm, "end_mm": end_mm,
+              "thickness_mm": thickness_mm, "height_mm": height_mm}
+    if name is not None:
+        params["name"] = name
+    return await _scene_call("create_wall", params)
+
+
+@mcp.tool(annotations=CREATE_TOOL)
+async def create_opening(wall: dict, offset_mm: float, bottom_mm: float,
+                         width_mm: float, height_mm: float, name: str | None = None) -> dict:
+    """Cut a rectangular through opening hosted by a wall."""
+    params = {"wall": wall, "offset_mm": offset_mm, "bottom_mm": bottom_mm,
+              "width_mm": width_mm, "height_mm": height_mm}
+    if name is not None:
+        params["name"] = name
+    return await _scene_call("create_opening", params)
+
+
+@mcp.tool(annotations=CREATE_TOOL)
+async def create_door(wall: dict, offset_mm: float, width_mm: float, height_mm: float,
+                      side: str = "center", name: str | None = None) -> dict:
+    """Create a semantic door with a through cut beginning at the wall base."""
+    params = {"wall": wall, "offset_mm": offset_mm, "width_mm": width_mm,
+              "height_mm": height_mm, "side": side}
+    if name is not None:
+        params["name"] = name
+    return await _scene_call("create_door", params)
+
+
+@mcp.tool(annotations=CREATE_TOOL)
+async def create_window(wall: dict, offset_mm: float, bottom_mm: float,
+                        width_mm: float, height_mm: float, side: str = "center",
+                        name: str | None = None) -> dict:
+    """Create a semantic window with a through cut in its host wall."""
+    params = {"wall": wall, "offset_mm": offset_mm, "bottom_mm": bottom_mm,
+              "width_mm": width_mm, "height_mm": height_mm, "side": side}
+    if name is not None:
+        params["name"] = name
+    return await _scene_call("create_window", params)
+
+
+@mcp.tool(annotations=CREATE_TOOL)
+async def create_niche(wall: dict, offset_mm: float, bottom_mm: float,
+                       width_mm: float, height_mm: float, depth_mm: float,
+                       side: str, name: str | None = None) -> dict:
+    """Create a partial-depth rectangular niche on positive_v or negative_v."""
+    params = {"wall": wall, "offset_mm": offset_mm, "bottom_mm": bottom_mm,
+              "width_mm": width_mm, "height_mm": height_mm,
+              "depth_mm": depth_mm, "side": side}
+    if name is not None:
+        params["name"] = name
+    return await _scene_call("create_niche", params)
+
+
+@mcp.tool(annotations=CREATE_TOOL)
+async def create_column(origin_mm: list[float], width_mm: float, depth_mm: float,
+                        height_mm: float, rotation_degrees: float = 0,
+                        name: str | None = None) -> dict:
+    """Create a rectangular vertical column in world coordinates."""
+    params = {"origin_mm": origin_mm, "width_mm": width_mm,
+              "depth_mm": depth_mm, "height_mm": height_mm,
+              "rotation_degrees": rotation_degrees}
+    if name is not None:
+        params["name"] = name
+    return await _scene_call("create_column", params)
+
+
+@mcp.tool(annotations=MUTATE_TOOL)
+async def update_architecture_object(target: dict, changes: dict) -> dict:
+    """Update semantic parameters and regenerate one architecture object."""
+    return await _scene_call("update_architecture_object", {"target": target, "changes": changes})
+
+
+@mcp.tool(annotations=MUTATE_TOOL)
+async def delete_architecture_object(target: dict, cascade: bool = False) -> dict:
+    """Delete an architecture object; wall dependencies require cascade=true."""
+    return await _scene_call("delete_architecture_object", {"target": target, "cascade": cascade})
+
+
+@mcp.tool(annotations=CREATE_TOOL)
+async def create_room(name: str, wall_ids: list[str]) -> dict:
+    """Create a semantic Room from an explicitly ordered, closed wall loop."""
+    return await _scene_call("create_room", {"name": name, "wall_ids": wall_ids})
+
+
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def detect_rooms() -> dict:
+    """Find simple closed loops of HomeCAD walls without creating Room objects."""
+    return await _scene_call("detect_rooms", {})
+
+
 def main() -> None:
     level = os.environ.get("HOMECAD_LOG_LEVEL", "INFO").upper()
     logging.basicConfig(level=getattr(logging, level, logging.INFO),

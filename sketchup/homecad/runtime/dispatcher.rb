@@ -8,6 +8,7 @@ module HomeCAD
         view.capture.v1
         scene.undo.v1
         geometry.primitive.v1
+        architecture.core.v1
       ].freeze
 
       def self.dispatch(request, handshake_done:)
@@ -35,6 +36,10 @@ module HomeCAD
           Primitives.dispatch(active_model!, method, params)
         when 'push_pull', 'follow_me', 'transform_object', 'boolean_operation'
           Mutations.dispatch(active_model!, method, params)
+        when 'get_wall_frame', 'create_wall', 'create_opening', 'create_door', 'create_window',
+             'create_niche', 'create_column', 'update_architecture_object',
+             'delete_architecture_object', 'create_room', 'detect_rooms'
+          Architecture.dispatch(active_model!, method, params)
         else
           raise BridgeError.new(-32601, 'unsupported_operation', "unknown method: #{method}")
         end

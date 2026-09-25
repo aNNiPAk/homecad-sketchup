@@ -62,7 +62,7 @@ async def test_handshake_and_two_tools():
 def test_capability_handshake_accepts_current_bridge_and_unknown_capabilities():
     hello = {"ruby_extension_version": "0.3.0", "capabilities": [
         "model.info.v1", "scene.inspect.v1", "scene.measure.v1", "view.capture.v1",
-        "scene.undo.v1", "geometry.primitive.v1", "future.unknown.v1"]}
+        "scene.undo.v1", "geometry.primitive.v1", "architecture.core.v1", "future.unknown.v1"]}
     BridgeClient._check_hello({"protocol_version": 1, **hello})
     for method in ("get_model_info", "list_objects", "find_objects", "get_object",
                    "get_selection", "measure", "capture_view", "undo"):
@@ -70,6 +70,10 @@ def test_capability_handshake_accepts_current_bridge_and_unknown_capabilities():
     for method in ("create_group", "create_face", "create_edge", "create_box", "create_circle",
                    "create_arc", "create_polygon", "push_pull", "follow_me", "transform_object",
                    "boolean_operation"):
+        BridgeClient._check_method_capability(method, hello)
+    for method in ("get_wall_frame", "create_wall", "create_opening", "create_door",
+                   "create_window", "create_niche", "create_column", "update_architecture_object",
+                   "delete_architecture_object", "create_room", "detect_rooms"):
         BridgeClient._check_method_capability(method, hello)
 
 
@@ -87,6 +91,9 @@ def test_old_bridge_without_capabilities_still_reports_status():
         BridgeClient._check_method_capability("capture_view", hello)
     assert caught.value.category == "unsupported_operation"
     BridgeClient._check_method_capability("homecad_status", {"capabilities": "malformed"})
+    with pytest.raises(BridgeError, match="architecture.core.v1") as architecture:
+        BridgeClient._check_method_capability("create_wall", hello)
+    assert architecture.value.category == "unsupported_operation"
 
 
 @pytest.mark.asyncio

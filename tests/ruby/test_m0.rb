@@ -88,6 +88,7 @@ class M0Test < Minitest::Test
     response = hello
     assert_equal '0.1.0', response.dig('result', 'ruby_extension_version')
     assert_equal HomeCAD::Runtime::Dispatcher::CAPABILITIES, response.dig('result', 'capabilities')
+    assert_includes response.dig('result', 'capabilities'), 'architecture.core.v1'
     send_request(2, 'homecad_status')
     status = next_response['result']
     assert_equal 'connected', status['connection_status']

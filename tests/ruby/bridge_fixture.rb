@@ -34,13 +34,22 @@ module Geom
   Vector3d = FixtureVector
   class Transformation
     attr_reader :translation
-    def initialize(x = 0, y = 0, z = 0) = (@translation = [x.to_f, y.to_f, z.to_f])
+    def initialize(x = 0, y = 0, z = 0, axes = nil)
+      @translation = [x.to_f, y.to_f, z.to_f]
+      @axes = axes || [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+    end
+    def self.axes(origin, xaxis, yaxis, zaxis)
+      new(origin.x, origin.y, origin.z, [[xaxis.x, xaxis.y, xaxis.z],
+        [yaxis.x, yaxis.y, yaxis.z], [zaxis.x, zaxis.y, zaxis.z]])
+    end
     def self.translation(vector) = new(vector.x, vector.y, vector.z)
     def self.rotation(*) = new
     def self.scaling(*) = new
     def *(other)
       if other.is_a?(FixturePoint)
-        FixturePoint.new(other.x + translation[0], other.y + translation[1], other.z + translation[2])
+        FixturePoint.new(translation[0] + @axes[0][0] * other.x + @axes[1][0] * other.y + @axes[2][0] * other.z,
+                         translation[1] + @axes[0][1] * other.x + @axes[1][1] * other.y + @axes[2][1] * other.z,
+                         translation[2] + @axes[0][2] * other.x + @axes[1][2] * other.y + @axes[2][2] * other.z)
       elsif other.is_a?(Transformation)
         Transformation.new(translation[0] + other.translation[0],
                            translation[1] + other.translation[1],
@@ -51,7 +60,9 @@ module Geom
     end
     def inverse = Transformation.new(*translation.map { |value| -value })
     def to_a
-      [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, *translation, 1]
+      [@axes[0][0], @axes[0][1], @axes[0][2], 0,
+       @axes[1][0], @axes[1][1], @axes[1][2], 0,
+       @axes[2][0], @axes[2][1], @axes[2][2], 0, *translation, 1]
     end
   end
 end
@@ -99,6 +110,15 @@ class FixtureEntities < Array
     face = Sketchup::Face.new(model.next_id, model, owner, points)
     self << face
     face
+  end
+  def clear!
+    clear
+    owner.reset_points if owner.respond_to?(:reset_points)
+    true
+  end
+  def erase_entities(*entities)
+    entities.each { |entity| delete(entity); entity.erase! if entity.respond_to?(:erase!) }
+    true
   end
   def add_line(first, last)
     edge = Sketchup::Edge.new(model.next_id, model, owner, [first, last])
@@ -182,6 +202,8 @@ class FixtureGroup < FixtureEntity
     @transformation = Geom::Transformation.new
   end
   def add_points(points) = @points.concat(points)
+  def reset_points = @points.clear
+  def fail_face = false
   def bounds
     return nil if @points.empty?
     transformed = @points.map { |point| transformation * point }
@@ -296,7 +318,7 @@ root = File.expand_path('../../sketchup/homecad', __dir__)
 %w[config errors logging framing operation].each do |name|
   require File.join(root, 'runtime', name)
 end
-%w[units metadata scene targeting serializer mutation inspection measurement capture geometry primitives mutations].each do |name|
+%w[units metadata scene targeting serializer mutation inspection measurement capture geometry primitives mutations architecture].each do |name|
   require File.join(root, 'core', name)
 end
 require File.join(root, 'runtime', 'dispatcher')

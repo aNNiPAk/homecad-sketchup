@@ -2,7 +2,7 @@ require 'json'
 require 'socket'
 
 module HomeCAD
-  VERSION = '0.3.0'
+  VERSION = '0.4.0'
   PROTOCOL_VERSION = 1
 end
 
@@ -17,6 +17,9 @@ Sketchup.require 'homecad/core/scene'
 Sketchup.require 'homecad/core/targeting'
 Sketchup.require 'homecad/core/serializer'
 Sketchup.require 'homecad/core/mutation'
+Sketchup.require 'homecad/core/geometry'
+Sketchup.require 'homecad/core/primitives'
+Sketchup.require 'homecad/core/mutations'
 Sketchup.require 'homecad/core/inspection'
 Sketchup.require 'homecad/core/measurement'
 Sketchup.require 'homecad/core/capture'

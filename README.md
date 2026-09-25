@@ -1,10 +1,10 @@
 # HomeCAD for SketchUp
 
-HomeCAD is a local MCP interface for inspecting an apartment scene in SketchUp. M1 provides `homecad_status`, `get_model_info`, `list_objects`, `find_objects`, `get_object`, `get_selection`, `measure`, `capture_view`, and `undo`. No drawing or domain creation tools are exposed yet. The roadmap is in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+HomeCAD is a local MCP interface for inspecting and safely editing a SketchUp scene. M2 adds a low-level primitive geometry layer; it is a developer/fallback API, not the future architecture or furniture interface. The roadmap is in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
 ## Requirements
 
-- Windows with SketchUp and Ruby extension support. The installed RBZ must be updated for M1.
+- Windows with SketchUp and Ruby extension support. The installed RBZ must be updated for M2.
 - [uv](https://docs.astral.sh/uv/) with Python 3.11+ for MCP and packaging.
 - Ruby 3.x for standalone Ruby tests; SketchUp supplies its own runtime when the extension is installed.
 
@@ -17,7 +17,7 @@ uv sync --project mcp
 uv run --project mcp python scripts/build_rbz.py
 ```
 
-Install `dist\homecad.rbz` with **SketchUp → Extensions → Extension Manager → Install Extension**, then restart SketchUp. The Ruby Console should show `[HomeCAD] INFO listening on 127.0.0.1:37941`. Confirm that `homecad_status.ruby_extension_version` says `0.3.0` and that it advertises `view.capture.v1` before running the capture smoke test.
+Install `dist\homecad.rbz` with **SketchUp → Extensions → Extension Manager → Install Extension**, then restart SketchUp. The Ruby Console should show `[HomeCAD] INFO listening on 127.0.0.1:37941`. Confirm that `homecad_status.ruby_extension_version` says `0.4.0` and that it advertises `geometry.primitive.v1` before running the M2 smoke test.
 
 The M0 connection check remains available:
 
@@ -46,6 +46,20 @@ For an MCP host, configure a stdio server with command `uv` and arguments `run -
 
 The full request and response shape is in [the M1 contract](tests/contracts/m1.md). Design decisions and reviewed reference commits are in [M1 decisions](docs/M1_DECISIONS.md); the versioned capability handshake is recorded in [ADR 0001](docs/decisions/0001-capability-handshake.md).
 
+## Primitive geometry (M2)
+
+Primitive tools are a low-level fallback. Public coordinates and lengths use millimeters, angles use degrees, points are `[x_mm, y_mm, z_mm]`, and all M2 points use world coordinates. Created objects are each contained by a managed root Group with a HomeCAD UUID. `push_pull` and `follow_me` accept only an unambiguous Face inside a root Group; shared component definitions are rejected. `transform_object` accepts root Groups and component instances. Boolean operations require manifold solids, create a new managed result, and preserve the source objects. Every call runs as one SketchUp operation and returns the shared `status/operation/created/updated/deleted/warnings/revision` envelope.
+
+MCP clients must check `geometry.primitive.v1`. Creation calls are non-idempotent; target mutations are destructive hints. Annotations are advisory only.
+
+Run the mutating smoke only after opening a disposable/test model. It creates a 600 × 560 × 720 mm box, moves it, captures an iso image, and invokes native Undo twice:
+
+```powershell
+uv run --project mcp python scripts/smoke_m2.py --confirm-disposable
+```
+
+The screenshot is written to `dist\m2-smoke.png`. The script reports the model's modified state before and after; confirm it manually against the initial state.
+
 MCP tools advertise standard behavior annotations: inspection and capture are read-only; `undo` is marked as state-changing and potentially destructive. These hints help clients present tools accurately but do not enforce safety.
 
 ## Configuration
@@ -70,7 +84,11 @@ ruby tests/ruby/test_inspection.rb
 ruby tests/ruby/test_measurement.rb
 ruby tests/ruby/test_capture.rb
 ruby tests/ruby/test_undo.rb
+ruby tests/ruby/test_mutation_core.rb
+ruby tests/ruby/test_geometry_validation.rb
+ruby tests/ruby/test_primitives.rb
+ruby tests/ruby/test_mutations.rb
 uv run --project mcp python scripts/build_rbz.py
 ```
 
-The [GitHub Actions workflow](.github/workflows/ci.yml) runs these Python, Ruby, and RBZ packaging checks on pushes and pull requests; it does not require SketchUp. The Python suite includes a Python-to-Ruby bridge fixture and an MCP stdio test with image content. Ruby tests use SketchUp API stand-ins. The real SketchUp smoke test above remains a manual check after installing the RBZ.
+The [GitHub Actions workflow](.github/workflows/ci.yml) runs Python, standalone Ruby, and RBZ packaging checks on pushes and pull requests; it does not require SketchUp. The Python suite includes a Python-to-Ruby bridge fixture and MCP stdio tests. Ruby tests use SketchUp API stand-ins. M1 inspection and M2 mutation smoke tests remain manual checks after installing the RBZ.

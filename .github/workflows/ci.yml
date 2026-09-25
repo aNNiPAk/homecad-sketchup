@@ -44,6 +44,10 @@ jobs:
           ruby tests/ruby/test_measurement.rb
           ruby tests/ruby/test_capture.rb
           ruby tests/ruby/test_undo.rb
+          ruby tests/ruby/test_mutation_core.rb
+          ruby tests/ruby/test_geometry_validation.rb
+          ruby tests/ruby/test_primitives.rb
+          ruby tests/ruby/test_mutations.rb
 
       - name: Build RBZ
         run: uv run --project mcp python scripts/build_rbz.py

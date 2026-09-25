@@ -422,6 +422,8 @@ Codex должен иметь возможность:
 
 # 9. Этап 2 — Primitive Geometry
 
+**Статус: реализован в версии 0.4.0.** Контракт и ограничения зафиксированы в [tests/contracts/m2.md](tests/contracts/m2.md) и [docs/M2_DECISIONS.md](docs/M2_DECISIONS.md). Следующий milestone M3 не входит в текущую реализацию.
+
 Добавить fallback tools:
 
 ```text

@@ -2,10 +2,17 @@
 
 ## Unreleased
 
+### Added
+
+- M2 Primitive Geometry: managed group, face, edge, box, circle, arc and polygon creation; push/pull, follow-me, transforms, and manifold boolean operations.
+- HomeCAD UUID metadata, object revisions, a shared mutation result envelope, `geometry.primitive.v1` capability, mutation annotations, Ruby regression tests, and a disposable-model M2 smoke script.
+- CI coverage for all M2 standalone Ruby tests.
+
 ### Changed
 
 - Set the minimum supported Python MCP SDK to 1.30, the version currently locked and tested by the project.
-- Renamed generic entity `dimensions_mm` / `measure(kind="dimensions")` to `bbox_dimensions_mm` / `measure(kind="bbox_dimensions")`; both now state explicitly that values are world-aligned bounding-box extents. Bumped the pre-1.0 version to 0.3.0.
+- Renamed generic entity `dimensions_mm` / `measure(kind="dimensions")` to `bbox_dimensions_mm` / `measure(kind="bbox_dimensions")`; both now state explicitly that values are world-aligned bounding-box extents. Bumped the pre-1.0 version to 0.3.0 for M1.1 and 0.4.0 for M2.
+- Added the M2 primitive API as a low-level fallback; it does not introduce Architecture, Furniture, Kitchen, Electrical, Lighting, or `eval_ruby` tools.
 
 ### Fixed
 

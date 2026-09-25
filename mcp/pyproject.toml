@@ -7,7 +7,7 @@ name = "homecad-mcp"
 version = "0.3.0"
 description = "HomeCAD for SketchUp MCP bridge"
 requires-python = ">=3.11"
-dependencies = ["mcp>=1.12,<2"]
+dependencies = ["mcp>=1.30,<2"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-asyncio>=0.24"]

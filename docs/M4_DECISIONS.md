@@ -44,3 +44,10 @@ The official [SketchUp Ruby API](https://ruby.sketchup.com/) is authoritative. T
 ## Verification boundary
 
 Standalone tests validate parameter calculations, frames, attachment planning, logical part schedules, mutation atomicity, and tool contracts. They do not prove the SketchUp kernel's face closure, visible panel orientation, or native Undo behavior. Run `scripts/smoke_m4.py --confirm-disposable` on a disposable model after installing the matching RBZ.
+
+## M4.1 hardening decisions
+
+- Direct Cabinet updates compare normalized canonical `FurnitureData` parameters. A changed name, dimension, detail level, front/shelf definition, or placement increments revision once even if the generated matrix is unchanged. A normalized no-op returns without opening an operation. Wall-driven relocation compares only effective transforms because the Cabinet's canonical Furniture parameters do not change.
+- `WallAttachment` stores a generic projection: `wall_id`, `offset_mm`, `bottom_mm`, `side`, `clearance_mm`, `span_u_mm`, and `span_z_mm`. Furniture derives its spans from width and height before calling the generic writer. Relocation planning reads only that projection and proposed Wall frame/dimensions; it does not access Furniture storage.
+- `back_thickness_mm = 0` means no back part or solid is present, and shelves span from Y=0 through Cabinet depth. Part schedules do not depend on detail level.
+- Pure placement updates preserve the generated child collection. Concept/construction transitions regenerate the children but preserve the Cabinet root Group and UUID.

@@ -84,9 +84,9 @@ M4 adds `furniture.core.v1` and a parametric `furniture.cabinet`. Use `create_ca
 
 Cabinet local origin is back-left-bottom. Local X is width, Y runs from back to front, and Z is vertical. World placement uses a global-Z rotation. Wall placement stores offset, bottom, side, and clearance in the Wall's local frame; the Cabinet follows Wall translation, rotation, and direction changes without changing these parameters. Wall shortening/height changes are rejected if the Cabinet no longer fits. Deleting a Wall with an attached Cabinet requires `cascade=true` and removes both in one Undo operation.
 
-`construction` detail creates separate generated carcass, back, shelf, and front panel Groups. `concept` detail keeps a simple case envelope and front planes. `list_furniture_parts` is parameter-derived and stable across these detail levels. The current core does not model hinges, hardware, drawer boxes, appliances, Kitchen runs, Electrical, or Lighting.
+`construction` detail creates separate generated carcass, optional back, shelf, and front panel Groups. Set `back_thickness_mm` to `0` to omit the back; shelves then start at the rear plane and span the full depth. `concept` detail keeps a simple case envelope and front planes. `list_furniture_parts` is parameter-derived and stable across these detail levels. The current core does not model hinges, hardware, drawer boxes, appliances, Kitchen runs, Electrical, or Lighting.
 
-Run the M4 smoke only in a disposable SketchUp model. It creates a test Wall and Cabinet, checks frame/schedule and dependency relocation, captures an image, exercises updates and cascade-delete Undo, and verifies test identities are gone:
+Run the M4 smoke only in a disposable SketchUp model. It checks construction/concept LOD, positive/negative Wall sides, same-transform detach/reattach, Wall relocation and fit rejection, a no-back Cabinet, screenshots, cascade-delete Undo, and cleanup of all test identities:
 
 ```powershell
 uv run --project mcp python scripts/smoke_m4.py --confirm-disposable
@@ -121,6 +121,7 @@ ruby tests/ruby/test_geometry_validation.rb
 ruby tests/ruby/test_primitives.rb
 ruby tests/ruby/test_mutations.rb
 ruby tests/ruby/test_architecture.rb
+ruby tests/ruby/test_furniture.rb
 uv run --project mcp python scripts/build_rbz.py
 ```
 

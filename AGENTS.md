@@ -35,3 +35,5 @@ HomeCAD architecture invariants
 - Do not copy AGPL code from SidhNor/sketchup-mcp-server. It may be used only as an architectural reference unless licensing is explicitly reconsidered.
 - Generated Furniture and other domain objects must be changed through their parameter tools and regenerated; primitive tools may not edit generated roots or descendants.
 - Keep Cabinet dimensions in generated geometry and placement in rigid transforms; never use root scaling to represent editable Furniture dimensions.
+- WallAttachment is a derived cross-domain projection. It must not depend on FurnitureData, ArchitectureData, ElectricalData, or any single domain storage implementation.
+- A domain object's revision tracks canonical semantic state changes, not only visible geometry or transform changes.

@@ -56,6 +56,14 @@ async def test_handshake_and_two_tools():
         await server.wait_closed()
 
 
+def test_capture_rejects_old_camera_bridge_without_blocking_m0():
+    hello = {"ruby_extension_version": "0.2.0"}
+    BridgeClient._check_method_version("homecad_status", hello)
+    with pytest.raises(BridgeError, match="requires HomeCAD RBZ 0.2.1") as caught:
+        BridgeClient._check_method_version("capture_view", hello)
+    assert caught.value.category == "incompatible_version"
+
+
 @pytest.mark.asyncio
 async def test_incompatible_version_rejected_by_ruby():
     async def handler(reader, writer):

@@ -84,6 +84,7 @@ class BridgeClient:
             })
             hello = check_response(await read_frame(reader, self.config.max_frame_bytes), 1)
             self._check_hello(hello)
+            self._check_method_version(method, hello)
             await self._send(writer, {
                 "jsonrpc": "2.0", "id": 2, "method": method, "params": params,
             })
@@ -111,5 +112,18 @@ class BridgeClient:
                 f"Incompatible HomeCAD bridge: expected protocol {PROTOCOL_VERSION} "
                 f"and extension {VERSION.split('.')[0]}.x.x; received protocol {protocol!r}, "
                 f"extension {version!r}. Install the matching HomeCAD RBZ.",
+                -32001,
+            )
+
+    @staticmethod
+    def _check_method_version(method: str, hello: dict[str, Any]) -> None:
+        if method != "capture_view":
+            return
+        version = tuple(int(part) for part in hello["ruby_extension_version"].split("."))
+        if version < (0, 2, 1):
+            raise BridgeError(
+                "incompatible_version",
+                "capture_view requires HomeCAD RBZ 0.2.1 or newer. Install the updated RBZ "
+                "and restart SketchUp before capturing a view.",
                 -32001,
             )

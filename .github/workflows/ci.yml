@@ -1,0 +1,49 @@
+name: CI
+
+"on":
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      - name: Install Python dependencies
+        run: uv sync --project mcp --extra dev
+
+      - name: Run Python tests
+        run: uv run --project mcp --extra dev python -m pytest tests/python -q
+
+      - name: Run standalone Ruby tests
+        run: |
+          ruby tests/ruby/test_m0.rb
+          ruby tests/ruby/test_targeting.rb
+          ruby tests/ruby/test_serializer.rb
+          ruby tests/ruby/test_inspection.rb
+          ruby tests/ruby/test_measurement.rb
+          ruby tests/ruby/test_capture.rb
+          ruby tests/ruby/test_undo.rb
+
+      - name: Build RBZ
+        run: uv run --project mcp python scripts/build_rbz.py

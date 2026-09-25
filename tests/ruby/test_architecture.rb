@@ -23,7 +23,10 @@ module Geom
                   @origin.y + @axes[0].y * point.x + @axes[1].y * point.y + @axes[2].y * point.z,
                   @origin.z + @axes[0].z * point.x + @axes[1].z * point.y + @axes[2].z * point.z)
     end
-    def to_a = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, @origin.x, @origin.y, @origin.z, 1]
+    def to_a = [@axes[0].x, @axes[0].y, @axes[0].z, 0,
+                @axes[1].x, @axes[1].y, @axes[1].z, 0,
+                @axes[2].x, @axes[2].y, @axes[2].z, 0,
+                @origin.x, @origin.y, @origin.z, 1]
   end
 end
 
@@ -40,7 +43,7 @@ module Sketchup
       @valid = true
     end
     def typename = 'Group'
-    def model = parent.respond_to?(:owner) ? parent.owner.model : parent
+    def model = parent.respond_to?(:model) ? parent.model : parent
     def valid? = @valid
     def deleted? = !@valid
     def erase! = (@valid = false)
@@ -51,7 +54,7 @@ module Sketchup
     def locked? = false
     def layer = nil
     def material = nil
-    def fail_face = !!model.fail_faces
+    def fail_face = model.respond_to?(:fail_faces) && !!model.fail_faces
     def add_points(points) = (@points ||= []).concat(points)
     def transform!(_transformation) = true
     def bounds
@@ -176,6 +179,9 @@ end
 root = File.expand_path('../../sketchup/homecad', __dir__)
 %w[errors operation].each { |name| require File.join(root, 'runtime', name) }
 %w[units metadata scene targeting serializer mutation geometry primitives architecture].each do |name|
+  require File.join(root, 'core', name)
+end
+%w[wall_attachment furniture_data furniture].each do |name|
   require File.join(root, 'core', name)
 end
 

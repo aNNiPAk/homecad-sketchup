@@ -34,6 +34,9 @@ module HomeCAD
       if data['type'].to_s.start_with?('architecture.') && defined?(ArchitectureData)
         result['parameters'] = safe_value(ArchitectureData.read_params(entity))
         result['relationships'] = safe_value(ArchitectureData.read_relationships(entity))
+      elsif data['type'] == 'furniture.cabinet' && defined?(FurnitureData)
+        result['parameters'] = safe_value(FurnitureData.read_params(entity))
+        result['relationships'] = safe_value(FurnitureData.read_relationships(entity))
       end
       result
     end

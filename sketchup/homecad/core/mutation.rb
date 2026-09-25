@@ -19,10 +19,16 @@ module HomeCAD
         parent = current.respond_to?(:parent) ? current.parent : nil
       end
 
-      metadata = Metadata.read(entity)
-      if metadata['generated'] == true && !PRIMITIVE_TYPE.match?(metadata['type'].to_s)
-        raise Runtime::BridgeError.new(-32008, 'constraint_violation',
-                                       'generated domain geometry cannot be edited by primitive tools')
+      current = entity
+      parent = entry.parent
+      while current && !current.equal?(model)
+        metadata = Metadata.read(current)
+        if metadata['generated'] == true && !PRIMITIVE_TYPE.match?(metadata['type'].to_s)
+          raise Runtime::BridgeError.new(-32008, 'constraint_violation',
+                                         'generated domain geometry cannot be edited by primitive tools')
+        end
+        current = parent
+        parent = current.respond_to?(:parent) ? current.parent : nil
       end
       entity
     end

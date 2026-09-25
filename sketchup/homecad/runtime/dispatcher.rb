@@ -9,6 +9,7 @@ module HomeCAD
         scene.undo.v1
         geometry.primitive.v1
         architecture.core.v1
+        furniture.core.v1
       ].freeze
 
       def self.dispatch(request, handshake_done:)
@@ -40,6 +41,9 @@ module HomeCAD
              'create_niche', 'create_column', 'update_architecture_object',
              'delete_architecture_object', 'create_room', 'detect_rooms'
           Architecture.dispatch(active_model!, method, params)
+        when 'get_furniture_frame', 'list_furniture_parts', 'create_cabinet',
+             'update_furniture_object', 'delete_furniture_object'
+          Furniture.dispatch(active_model!, method, params)
         else
           raise BridgeError.new(-32601, 'unsupported_operation', "unknown method: #{method}")
         end

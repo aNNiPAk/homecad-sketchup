@@ -388,6 +388,7 @@ module HomeCAD
       proposed = current.merge(changes)
       wall = nil
       rooms_to_update = []
+      attachments_to_move = []
       if type == 'architecture.wall'
         frame, proposed = validate_wall_params!(proposed)
         hosts = hosted_for(model, data['homecad_id'])
@@ -397,6 +398,7 @@ module HomeCAD
         cuts.each do |cut|
           constraint!('wall update would invalidate a hosted object') if cut['offset_mm'] + cut['width_mm'] > frame.length_mm + TOLERANCE_MM[:cut] || cut['bottom_mm'] + cut['height_mm'] > proposed['height_mm'] + TOLERANCE_MM[:cut]
         end
+        attachments_to_move = WallAttachment.plan_relocation(model, data['homecad_id'], proposed)
         rooms_for(model, data['homecad_id']).each do |room|
           require_mutable!(room)
           room_params = ArchitectureData.read_params(room)
@@ -444,6 +446,10 @@ module HomeCAD
             regenerate_room!(room, room_params)
             updated << room
           end
+          attachments_to_move.each do |cabinet, transform|
+            cabinet.transformation = transform
+            updated << cabinet
+          end
         when *HOSTED_TYPES
           ArchitectureData.write(group, params: proposed, relationships: { 'wall_id' => data['wall_id'] })
           group.entities.clear!
@@ -485,7 +491,8 @@ module HomeCAD
       wall = nil
       dependents = []
       if type == 'architecture.wall'
-        dependents = hosted_for(model, metadata['homecad_id']) + rooms_for(model, metadata['homecad_id'])
+        dependents = hosted_for(model, metadata['homecad_id']) + rooms_for(model, metadata['homecad_id']) +
+                     WallAttachment.dependents_for(model, metadata['homecad_id'])
         dependents.each { |entity| require_mutable!(entity) }
         constraint!('wall has hosted objects; set cascade=true to delete them') if dependents.any? && !cascade
       elsif HOSTED_TYPES.include?(type)
@@ -718,8 +725,13 @@ module HomeCAD
     def self.serialize_entity(entity)
       entry = Scene::Entry.new(entity: entity, parent: nil, path: [Scene.id(entity)], transform: nil)
       serialized = Serializer.serialize(entry, level: 'detailed')
-      serialized['parameters'] = ArchitectureData.read_params(entity)
-      serialized['relationships'] = ArchitectureData.read_relationships(entity)
+      if Metadata.read(entity)['type'] == 'furniture.cabinet' && defined?(FurnitureData)
+        serialized['parameters'] = FurnitureData.read_params(entity)
+        serialized['relationships'] = FurnitureData.read_relationships(entity)
+      else
+        serialized['parameters'] = ArchitectureData.read_params(entity)
+        serialized['relationships'] = ArchitectureData.read_relationships(entity)
+      end
       serialized
     end
 

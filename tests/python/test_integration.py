@@ -116,14 +116,27 @@ async def test_m1_smoke_script_against_ruby_fixture(tmp_path):
     )
     try:
         port = int(await asyncio.wait_for(bridge.stdout.readline(), 5))
+        for args in (("--name", "Known Chair"), ("--name", "Missing Name"), ()):
+            run = await asyncio.create_subprocess_exec(
+                sys.executable, "scripts/smoke_m1.py", *args,
+                "--output", str(tmp_path), cwd=ROOT,
+                env={**os.environ, "HOMECAD_PORT": str(port)},
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(run.communicate(), 40)
+            assert run.returncode == 0, (stdout + stderr).decode()
+            if args == ("--name", "Missing Name"):
+                assert b"Using the single selected object" in stdout
         run = await asyncio.create_subprocess_exec(
-            sys.executable, "scripts/smoke_m1.py", "--name", "Known Chair",
+            sys.executable, "scripts/smoke_m1.py", "--name", "a",
             "--output", str(tmp_path), cwd=ROOT,
             env={**os.environ, "HOMECAD_PORT": str(port)},
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await asyncio.wait_for(run.communicate(), 40)
-        assert run.returncode == 0, (stdout + stderr).decode()
+        assert run.returncode == 2
+        assert b"smoke_m1: Name 'a' is multiple" in stderr
+        assert b"ExceptionGroup" not in stderr
         assert (tmp_path / "top.png").read_bytes().startswith(b"\x89PNG")
         assert (tmp_path / "iso.png").read_bytes().startswith(b"\x89PNG")
     finally:

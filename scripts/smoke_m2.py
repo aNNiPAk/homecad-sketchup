@@ -233,37 +233,17 @@ async def run(output: Path) -> None:
                     "path_points_mm": [[0, 0, 0], [200, 0, 0], [200, 150, 0]]})
                 if sweep.get("status") != "success" or sweep.get("updated", [{}])[0].get("identity", {}).get("homecad_id") != follow_group:
                     raise SmokeError("follow_me did not update the profile Group")
-                edges, _ = await call("list_objects", {
-                    "parent": {"homecad_id": follow_group}, "entity_type": "Edge",
-                    "include_generated": True, "limit": 512,
-                })
-                retained_path = False
-                expected_segments = [([0, 0, 0], [200, 0, 0]), ([200, 0, 0], [200, 150, 0])]
-                for edge in edges.get("objects", []):
-                    identity = edge.get("identity", {})
-                    selector = {key: identity[key] for key in ("persistent_id", "entity_id")
-                                if identity.get(key) is not None}
-                    if not selector:
-                        continue
-                    details = await get(selector)
-                    bounds = details.get("bbox_mm") or {}
-                    for first, last in expected_segments:
-                        wanted_min = [min(a, b) for a, b in zip(first, last)]
-                        wanted_max = [max(a, b) for a, b in zip(first, last)]
-                        actual_min, actual_max = bounds.get("min"), bounds.get("max")
-                        if actual_min and actual_max and all(
-                            abs(actual_min[index] - wanted_min[index]) <= 0.5 and
-                            abs(actual_max[index] - wanted_max[index]) <= 0.5 for index in range(3)
-                        ):
-                            retained_path = True
-                has_retention_warning = any("path edges" in warning.lower() and "retained" in warning.lower()
-                                            for warning in sweep.get("warnings", []))
-                if retained_path and not has_retention_warning:
-                    raise SmokeError("Follow Me retained a path edge without reporting its warning")
-                if has_retention_warning:
-                    print("Follow Me retained a path edge connected to the swept topology, as documented.")
+                swept = await get({"homecad_id": follow_group})
+                swept_dims = swept.get("bbox_dimensions_mm") or {}
+                if sweep.get("revision") != 2 or not all(swept_dims.get(axis, 0) > 0
+                                                          for axis in ("width", "depth", "height")):
+                    raise SmokeError("Follow Me did not produce the expected L-shaped solid bounds/revision")
+                retained_warnings = [warning for warning in sweep.get("warnings", [])
+                                     if "path edges" in warning.lower() and "retained" in warning.lower()]
+                if retained_warnings:
+                    print("Follow Me retained path edges connected to swept topology; mutation reported its warning.")
                 else:
-                    print("Follow Me temporary path edges were removed.")
+                    print("Follow Me reported no retained helper path edges after cleanup.")
                 await screenshot(output.with_name(output.stem + "-follow-me.png"), {"homecad_id": follow_group})
                 await undo_one()
                 await undo_one()

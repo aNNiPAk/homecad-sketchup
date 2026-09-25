@@ -17,7 +17,7 @@
 
 - Set the minimum supported Python MCP SDK to 1.30, the version currently locked and tested by the project.
 - Renamed generic entity `dimensions_mm` / `measure(kind="dimensions")` to `bbox_dimensions_mm` / `measure(kind="bbox_dimensions")`; both now state explicitly that values are world-aligned bounding-box extents. Bumped the pre-1.0 version to 0.3.0 for M1.1 and 0.4.0 for M2.
-- Bumped the pre-1.0 version to 0.4.2 after the SketchUp 26.2 smoke exposed reversed bounds from the prior `split` result selection. The `subtract` call direction now follows the documented parameter semantics; verification against the rebuilt extension is still required.
+- Bumped the pre-1.0 version to 0.4.2 after the SketchUp 26.2 smoke exposed reversed bounds from the prior `split` result selection. The rebuilt `subtract` direction was confirmed by the asymmetric SketchUp 26.2.243 smoke.
 - M2 remains a low-level fallback; no Architecture, Furniture, Kitchen, Electrical, Lighting, or `eval_ruby` tools were added.
 
 ### Fixed

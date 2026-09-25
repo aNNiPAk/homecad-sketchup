@@ -4,6 +4,9 @@
 
 ### Added
 
+- M3 Architecture: generated Walls with local U/V/Z frames, hosted Openings/Doors/Windows/Niches, rectangular Columns, ordered Rooms, and conservative read-only room detection under `architecture.core.v1`.
+- Architecture parameter/relationship storage, deterministic wall cut regeneration, hosted dependency validation, revision-aware generic updates/deletion, and a disposable SketchUp M3 smoke test.
+- Python/Ruby M3 tool schemas, annotations, capability checks, cross-language fixture coverage, and explicit RBZ packaging assertions for the architecture runtime.
 - M2.1 geometry correctness hardening: exact target-minus-tool boolean difference, world-safe push/pull checks, and guarded Follow Me path cleanup.
 - M2 Primitive Geometry: managed group, face, edge, box, circle, arc and polygon creation; push/pull, follow-me, transforms, and manifold boolean operations.
 - HomeCAD UUID metadata, object revisions, a shared mutation result envelope, `geometry.primitive.v1` capability, mutation annotations, Ruby regression tests, and a disposable-model M2 smoke script.
@@ -18,7 +21,8 @@
 - Set the minimum supported Python MCP SDK to 1.30, the version currently locked and tested by the project.
 - Renamed generic entity `dimensions_mm` / `measure(kind="dimensions")` to `bbox_dimensions_mm` / `measure(kind="bbox_dimensions")`; both now state explicitly that values are world-aligned bounding-box extents. Bumped the pre-1.0 version to 0.3.0 for M1.1 and 0.4.0 for M2.
 - Bumped the pre-1.0 version to 0.4.2 after the SketchUp 26.2 smoke exposed reversed bounds from the prior `split` result selection. The rebuilt `subtract` direction was confirmed by the asymmetric SketchUp 26.2.243 smoke.
-- M2 remains a low-level fallback; no Architecture, Furniture, Kitchen, Electrical, Lighting, or `eval_ruby` tools were added.
+- Bumped the pre-1.0 version to 0.5.0 for the additive Architecture domain capability and tool set. Protocol version remains 1.
+- M2 remains a low-level fallback. M3 adds Architecture only; Furniture, Kitchen, Electrical, Lighting, and `eval_ruby` are not included.
 
 ### Fixed
 

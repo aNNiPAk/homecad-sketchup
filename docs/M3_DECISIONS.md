@@ -30,12 +30,17 @@
 - `Sketchup::Group#split` returns `[other - self, self - other, intersection]`, but deletes both original operands and is unavailable in SketchUp Make. It is unsuitable for walls or semantic hosted cuts.
 - Group boolean APIs require manifold solids and are not used by the architecture wall generator.
 - `Geom::Transformation.axes(origin, xaxis, yaxis, zaxis)` represents the local frame for Group placement. Public coordinates remain millimeters and are converted only through `HomeCAD::Units`.
+- M3 wall generation partitions only at bounded hosted-cut boundaries (up to 16 cuts, including at most 4 niches) and emits boundary quads with a consistent outward winding. This bounds the generated cell grid without relying on booleans.
+- Room-facing side follows ordered boundary winding: for a counterclockwise room, a boundary traversal aligned with stored wall U faces `positive_v`; reverse traversal faces `negative_v`. The optional floor face is oriented upward when SketchUp reports a downward normal.
+- A wall mutation validates locked hosted objects and all dependent Room loops before starting the operation. Window concept geometry and Room reference geometry are regenerated in that same operation; each affected domain object's revision increments once.
 
 Official API references:
 
 - [Sketchup::Entities](https://ruby.sketchup.com/Sketchup/Entities.html)
 - [Sketchup::Group](https://ruby.sketchup.com/Sketchup/Group.html)
 - [Geom::Transformation](https://ruby.sketchup.com/Geom/Transformation.html)
+
+Real-kernel acceptance remains a manual step. The current SketchUp 26.2.243 connection reports the installed extension as 0.4.2 and does not advertise `architecture.core.v1`; the M3 RBZ was built and packaging-checked, but was not installed during this implementation run.
 
 ## References reviewed
 
@@ -49,4 +54,3 @@ Reference checkouts were inspected at these commits. No source code is copied; S
 | `Tarkiin/SketchUp-MCP` | `a47ca45d9568f175d0d2aed5320713fb3b272e37` | Primitive geometry patterns only; M3 remains domain-first. |
 | `mhyrr/sketchup-mcp` | `aa096f04d3d7b22a70860368f2b576343feac405` | No M3 implementation reused. |
 | `SidhNor/sketchup-mcp-server` | `75b851cbfb145fdfb444ed4c769216095c655c02` | Architecture/reference concepts and tests inspected; AGPL code not copied. |
-

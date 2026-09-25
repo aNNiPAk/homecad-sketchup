@@ -1,10 +1,10 @@
 # HomeCAD for SketchUp
 
-HomeCAD is a local MCP interface for inspecting and safely editing a SketchUp scene. M2 adds a low-level primitive geometry layer; it is a developer/fallback API, not the future architecture or furniture interface. The roadmap is in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+HomeCAD is a local MCP interface for inspecting and safely editing a SketchUp scene. M3 adds a semantic parametric Architecture layer. M2 primitives remain a low-level developer/fallback API. The roadmap is in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
 ## Requirements
 
-- Windows with SketchUp and Ruby extension support. The installed RBZ must be updated for M2.
+- Windows with SketchUp and Ruby extension support. Install the matching M3 RBZ for architecture tools.
 - [uv](https://docs.astral.sh/uv/) with Python 3.11+ for MCP and packaging.
 - Ruby 3.x for standalone Ruby tests; SketchUp supplies its own runtime when the extension is installed.
 
@@ -17,7 +17,7 @@ uv sync --project mcp
 uv run --project mcp python scripts/build_rbz.py
 ```
 
-Install `dist\homecad.rbz` with **SketchUp → Extensions → Extension Manager → Install Extension**, then restart SketchUp. The Ruby Console should show `[HomeCAD] INFO listening on 127.0.0.1:37941`. Confirm that `homecad_status.ruby_extension_version` says `0.4.2` and that it advertises `geometry.primitive.v1` before running the M2 smoke test.
+Install `dist\homecad.rbz` with **SketchUp → Extensions → Extension Manager → Install Extension**, then restart SketchUp. The Ruby Console should show `[HomeCAD] INFO listening on 127.0.0.1:37941`. Confirm that `homecad_status.ruby_extension_version` says `0.5.0` and that it advertises `architecture.core.v1` before running the M3 smoke test.
 
 The M0 connection check remains available:
 
@@ -62,6 +62,22 @@ Screenshots are written under `dist\m2-smoke*.png`. The script reports model mod
 
 MCP tools advertise standard behavior annotations: inspection and capture are read-only; `undo` is marked as state-changing and potentially destructive. These hints help clients present tools accurately but do not enforce safety.
 
+## Architecture (M3)
+
+M3 adds `architecture.core.v1` and the `Wall`, `Opening`, `Door`, `Window`, `Niche`, `Column`, and `Room` domain objects. Use `create_wall`, the hosted cut tools, `create_column`, `create_room`, and `update_architecture_object` to change their parameters. HomeCAD regenerates generated geometry from domain data; primitive tools cannot edit generated architecture objects. A wall update preserves its root Group and HomeCAD UUID, keeps hosted offsets in wall-local coordinates, validates all dependent cuts/Rooms, and regenerates the host and affected concept geometry in one Undo operation.
+
+Wall frame contract: origin is the start endpoint; U points along the horizontal baseline; Z is global up; V = Z × U. Thus U × V = Z. The centerline is at V=0 and thickness spans ±thickness/2. Hosted cut anchors use lower-left U/Z: `offset_mm` from the wall start, `bottom_mm` from its base, width toward +U, height toward +Z. `side` only accepts `center`, `positive_v`, or `negative_v`. Openings, doors, and windows cut through the wall; niches are partial-depth and require a positive/negative V side. Overlapping cuts are rejected.
+
+`detect_rooms` reads only root-level HomeCAD Walls and reports simple closed loops conservatively; it never creates Room objects. `create_room` requires the caller's ordered wall IDs and stores each boundary's room-facing V side. Its optional floor face is reference geometry with approximate area. SketchUp Model remains the project root; M3 does not add an Apartment container.
+
+For a disposable/test model only, run the M3 SketchUp smoke after installing the matching RBZ:
+
+```powershell
+uv run --project mcp python scripts/smoke_m3.py --confirm-disposable
+```
+
+It exercises wall frame and cuts, hosted window/door regeneration after a wall rotation, rejected invalid shortening, a partial niche, conservative Room detection/creation, screenshots, and native Undo cleanup. See [the M3 contract](tests/contracts/m3.md) and [M3 decisions](docs/M3_DECISIONS.md). A SketchUp kernel run is still needed to accept manifoldness, niche depth, generated concept geometry, and Undo behavior in SketchUp 26.2.
+
 ## Configuration
 
 | Variable | Default | Effect |
@@ -88,7 +104,8 @@ ruby tests/ruby/test_mutation_core.rb
 ruby tests/ruby/test_geometry_validation.rb
 ruby tests/ruby/test_primitives.rb
 ruby tests/ruby/test_mutations.rb
+ruby tests/ruby/test_architecture.rb
 uv run --project mcp python scripts/build_rbz.py
 ```
 
-The [GitHub Actions workflow](.github/workflows/ci.yml) runs Python, standalone Ruby, and RBZ packaging checks on pushes and pull requests; it does not require SketchUp. The Python suite includes a Python-to-Ruby bridge fixture and MCP stdio tests. Ruby tests use SketchUp API stand-ins. M1 inspection and M2 mutation smoke tests remain manual checks after installing the RBZ.
+The [GitHub Actions workflow](.github/workflows/ci.yml) runs Python, standalone Ruby, and RBZ packaging checks on pushes and pull requests; it does not require SketchUp. The Python suite includes Python-to-Ruby bridge fixtures and MCP stdio tests. Ruby tests use SketchUp API stand-ins. M1 inspection, M2 primitive, and M3 architecture smoke tests remain manual checks after installing the matching RBZ.

@@ -17,6 +17,8 @@ module Geom
 end
 FixtureBounds = Struct.new(:origin) do
   def empty? = false
+  def min = FixturePoint.new(origin, 0, 0)
+  def max = FixturePoint.new(origin + 1, 1, 1)
   def corner(index)
     FixturePoint.new(origin + (index & 1), (index >> 1) & 1, (index >> 2) & 1)
   end
@@ -32,6 +34,10 @@ FixtureView = Struct.new(:camera, keyword_init: true) do
   def vpheight = 600
   def zoom_extents = self
   def zoom(*) = self
+  def refresh = self
+  def camera=(value)
+    self[:camera] = value.is_a?(Array) ? value[0] : value
+  end
   def write_image(filename:, **)
     File.binwrite(filename, "\x89PNG\r\n\x1A\nfixture".b)
     true
@@ -41,18 +47,23 @@ end
 module Sketchup
   class Camera
     attr_reader :eye, :target, :up
-    attr_accessor :perspective
-    def initialize(eye, target, up)
+    attr_accessor :perspective, :height, :aspect_ratio
+    def initialize(eye, target, up, perspective = true, _fov = 30.0)
       @eye, @target, @up = eye, target, up
-      @perspective = true
+      @perspective = perspective
+      @aspect_ratio = 0.0
     end
     def perspective? = @perspective
     def fov = 35.0
-    def height = 100.0
+    def height = @height || 100.0
+    def set(eye, target, up)
+      @eye, @target, @up = eye, target, up
+    end
   end
   Model = Struct.new(:name, :title, :path, :guid, :entities, :active_entities,
                      :selection, :active_view, keyword_init: true) do
     def modified? = false
+    def bounds = FixtureBounds.new(0)
     def find_entity_by_persistent_id(id) = entities.find { |entity| entity.persistent_id == id }
     def find_entity_by_id(id) = entities.find { |entity| entity.entityID == id }
   end
@@ -77,7 +88,7 @@ module Sketchup
 end
 
 module HomeCAD
-  VERSION = '0.2.0'
+  VERSION = '0.2.1'
   PROTOCOL_VERSION = 1
 end
 

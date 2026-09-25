@@ -27,27 +27,57 @@ module HomeCAD
       Inspection.invalid!('target and zoom_extents cannot be combined') if zoom && params.key?('target')
       target = params.key?('target') ? Targeting.resolve_one(model, params['target']) : nil
       view = model.active_view
-      original = view.camera.clone
-      before = camera_state(original)
-      width, height = image_size(view, max_size)
       changed = name != 'current' || !target.nil? || zoom
+      if changed && restore && view.camera.respond_to?(:is_2d?) && view.camera.is_2d?
+        Inspection.invalid!('camera restoration for two-point perspective is unsupported')
+      end
+      original = snapshot_camera(view.camera) if changed && restore
+      before = camera_state(view.camera)
+      width, height = image_size(view, max_size)
       response = nil
       begin
         set_camera(view, name) unless name == 'current'
         focus_target(view, target) if target
-        view.zoom_extents if zoom
+        frame_model(view, model) if zoom
         png = write_png(view, width, height)
         response = { 'mime_type' => 'image/png', 'image_base64' => Base64.strict_encode64(png),
                      'view' => name, 'width' => width, 'height' => height,
                      'target' => target && Targeting.identity(target), 'camera_before' => before }
       ensure
-        view.camera = original if restore && changed
+        if original
+          view.camera = [original, 0.0]
+          view.refresh
+        end
         if response
           response['camera_after'] = camera_state(view.camera)
-          response['camera_restored'] = restore && response['camera_before'] == response['camera_after']
+          response['camera_restored'] = restore && same_camera_state?(response['camera_before'], response['camera_after'])
         end
       end
       response
+    end
+
+    def self.snapshot_camera(source)
+      point = ->(value) { Geom::Point3d.new(value.x, value.y, value.z) }
+      up = Geom::Vector3d.new(source.up.x, source.up.y, source.up.z)
+      perspective = source.perspective?
+      copy = Sketchup::Camera.new(point.call(source.eye), point.call(source.target), up,
+                                   perspective, perspective ? source.fov : 30.0)
+      copy.height = source.height unless perspective
+      copy.aspect_ratio = source.aspect_ratio if source.respond_to?(:aspect_ratio)
+      copy
+    end
+
+    def self.same_camera_state?(before, after)
+      before.all? do |key, value|
+        other = after[key]
+        if value.is_a?(Array)
+          other.is_a?(Array) && value.zip(other).all? { |a, b| a.is_a?(Numeric) && b.is_a?(Numeric) && (a - b).abs < 0.0001 }
+        elsif value.is_a?(Numeric)
+          other.is_a?(Numeric) && (value - other).abs < 0.0001
+        else
+          value == other
+        end
+      end
     end
 
     def self.camera_state(camera)
@@ -57,7 +87,8 @@ module HomeCAD
         'up' => camera.respond_to?(:up) ? [camera.up.x, camera.up.y, camera.up.z] : nil,
         'perspective' => perspective,
         'fov' => perspective && camera.respond_to?(:fov) ? camera.fov : nil,
-        'height_mm' => perspective == false && camera.respond_to?(:height) ? Units.internal_to_mm(camera.height) : nil }
+        'height_mm' => perspective == false && camera.respond_to?(:height) ? Units.internal_to_mm(camera.height) : nil,
+        'aspect_ratio' => camera.respond_to?(:aspect_ratio) ? camera.aspect_ratio : nil }
     end
 
     def self.image_size(view, max_size)
@@ -80,13 +111,26 @@ module HomeCAD
                               center.z + direction[2] * distance)
       camera = Sketchup::Camera.new(eye, center, Geom::Vector3d.new(*up))
       camera.perspective = false
-      view.camera = camera
+      view.camera = [camera, 0.0]
     end
 
     def self.focus_target(view, entry)
       box = Serializer.bounds(entry)
       raise Runtime::BridgeError.new(-32005, 'geometry_error', 'target has no bounds to frame') unless box
 
+      focus_bounds(view, box)
+    end
+
+    def self.frame_model(view, model)
+      bounds = model.bounds
+      return if bounds.empty?
+
+      box = { 'min' => [bounds.min.x, bounds.min.y, bounds.min.z].map { |value| Units.internal_to_mm(value) },
+              'max' => [bounds.max.x, bounds.max.y, bounds.max.z].map { |value| Units.internal_to_mm(value) } }
+      focus_bounds(view, box)
+    end
+
+    def self.focus_bounds(view, box)
       center = (0..2).map { |index| Units.mm_to_internal((box['min'][index] + box['max'][index]) / 2.0) }
       extents = (0..2).map { |index| Units.mm_to_internal(box['max'][index] - box['min'][index]) }
       diameter = Math.sqrt(extents.sum { |value| value * value })
@@ -107,7 +151,7 @@ module HomeCAD
       end
       eye = (0..2).map { |index| center[index] + vector[index] / length * distance }
       camera.set(Geom::Point3d.new(*eye), Geom::Point3d.new(*center), camera.up)
-      view.camera = camera
+      view.camera = [camera, 0.0]
     end
 
     def self.write_png(view, width, height)

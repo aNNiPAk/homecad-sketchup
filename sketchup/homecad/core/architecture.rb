@@ -400,9 +400,8 @@ module HomeCAD
         rooms_for(model, data['homecad_id']).each do |room|
           require_mutable!(room)
           room_params = ArchitectureData.read_params(room)
-          points, sides = room_boundary!(model, room_params['wall_ids'], overrides: { data['homecad_id'] => proposed })
-          revised_room = room_params.merge('boundary_mm' => points, 'room_sides' => sides,
-            'approx_area_mm2' => polygon_area(points).abs)
+          revised_room = room_params.merge(derive_room_state(model, room_params['wall_ids'],
+            overrides: { data['homecad_id'] => proposed }))
           rooms_to_update << [room, revised_room]
         end
       elsif HOSTED_TYPES.include?(type)
@@ -418,8 +417,7 @@ module HomeCAD
         %w[width_mm depth_mm height_mm].each { |key| proposed[key] = positive!(proposed[key], key) }
         proposed['rotation_degrees'] = finite_value!(proposed.fetch('rotation_degrees', 0), 'rotation_degrees')
       elsif type == 'architecture.room'
-        _points, sides = room_boundary!(model, proposed['wall_ids'])
-        proposed['room_sides'] = sides
+        proposed.merge!(derive_room_state(model, proposed['wall_ids']))
       end
       Operation.run('Update architecture object', model: model) do
         updated = [group]
@@ -441,7 +439,8 @@ module HomeCAD
           end
           updated.concat(hosts)
           rooms_to_update.each do |room, room_params|
-            ArchitectureData.write(room, params: room_params, relationships: ArchitectureData.read_relationships(room))
+            ArchitectureData.write(room, params: room_params,
+              relationships: room_relationships(room_params['room_sides']))
             regenerate_room!(room, room_params)
             updated << room
           end
@@ -459,7 +458,10 @@ module HomeCAD
         when 'architecture.column' then regenerate_column!(group, proposed)
         when 'architecture.room' then regenerate_room!(group, proposed)
         end
-        ArchitectureData.write(group, params: proposed, relationships: ArchitectureData.read_relationships(group)) unless type == 'architecture.wall'
+        unless type == 'architecture.wall'
+          relationships = type == 'architecture.room' ? room_relationships(proposed['room_sides']) : ArchitectureData.read_relationships(group)
+          ArchitectureData.write(group, params: proposed, relationships: relationships)
+        end
         group.name = proposed['name'] if proposed['name'].is_a?(String)
         updated.each { |entity| Metadata.increment_revision!(entity) }
         mutation_result('update_architecture_object', updated: updated.uniq, revision: Metadata.read(group)['revision'])
@@ -509,15 +511,12 @@ module HomeCAD
     def self.create_room(model, params)
       Primitives.check_keys!(params, %w[name wall_ids])
       name!(params['name'])
-      points, sides = room_boundary!(model, params['wall_ids'])
-      params_out = { 'name' => params['name'], 'wall_ids' => params['wall_ids'],
-                     'room_sides' => sides, 'boundary_mm' => points,
-                     'approx_area_mm2' => polygon_area(points).abs }
+      params_out = { 'name' => params['name'] }.merge(derive_room_state(model, params['wall_ids']))
       Operation.run('Create room', model: model) do
         group = model.entities.add_group
         group.name = params['name'] if params['name']
         Metadata.create!(group, type: 'architecture.room')
-        ArchitectureData.write(group, params: params_out, relationships: sides.to_h { |wall_id, side| ["wall_#{wall_id}", side] })
+        ArchitectureData.write(group, params: params_out, relationships: room_relationships(params_out['room_sides']))
         regenerate_room!(group, params_out)
         mutation_result('create_room', created: [group], revision: 1)
       end
@@ -612,6 +611,18 @@ module HomeCAD
         [metadata['homecad_id'], (forward ? orientation : -orientation).positive? ? 'positive_v' : 'negative_v']
       end
       [points, sides]
+    end
+
+    # Editable Room state is the ordered wall list; the boundary, sides, area, and
+    # relationships are always derived together from the current wall geometry.
+    def self.derive_room_state(model, wall_ids, overrides: {})
+      points, sides = room_boundary!(model, wall_ids, overrides: overrides)
+      { 'wall_ids' => wall_ids.dup, 'boundary_mm' => points,
+        'room_sides' => sides, 'approx_area_mm2' => polygon_area(points).abs }
+    end
+
+    def self.room_relationships(sides)
+      sides.to_h { |wall_id, side| ["wall_#{wall_id}", side] }
     end
 
     def self.regenerate_column!(group, params)

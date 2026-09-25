@@ -185,6 +185,33 @@ class ArchitectureTest < Minitest::Test
     Sketchup.active_model = @model
   end
 
+  def create_rectangular_walls(x, y, width, depth)
+    points = [[x, y, 0], [x + width, y, 0], [x + width, y + depth, 0], [x, y + depth, 0]]
+    points.each_with_index.map do |start, index|
+      finish = points[(index + 1) % points.length]
+      HomeCAD::Architecture.create_wall(@model,
+        'start_mm' => start, 'end_mm' => finish, 'thickness_mm' => 120, 'height_mm' => 2700)
+        .dig('created', 0, 'identity', 'homecad_id')
+    end
+  end
+
+  def room_entity(homecad_id)
+    @model.entities.find { |entity| HomeCAD::Metadata.read(entity)['homecad_id'] == homecad_id }
+  end
+
+  def room_face_points(room)
+    room.entities.find { |entity| entity.typename == 'Face' }.points.map do |point|
+      [HomeCAD::Units.internal_to_mm(point.x), HomeCAD::Units.internal_to_mm(point.y), HomeCAD::Units.internal_to_mm(point.z)]
+    end
+  end
+
+  def assert_points_equal(expected, actual)
+    assert_equal expected.length, actual.length
+    expected.zip(actual).each do |left, right|
+      left.zip(right).each { |a, b| assert_in_delta a, b, 1e-6 }
+    end
+  end
+
   def test_wall_frame_axes_and_roundtrip_for_x_y_and_arbitrary_xy
     [[ [0, 0, 0], [4000, 0, 0], [1, 0, 0], [0, 1, 0] ],
      [[0, 0, 0], [0, 3000, 0], [0, 1, 0], [-1, 0, 0]],
@@ -427,6 +454,125 @@ class ArchitectureTest < Minitest::Test
     result = HomeCAD::Architecture.create_room(@model, 'name' => 'Test room', 'wall_ids' => ids)
     assert_equal 'architecture.room', result.dig('created', 0, 'metadata', 'type')
     assert_equal ids, result.dig('created', 0, 'parameters', 'wall_ids')
+  end
+
+  def test_room_wall_ids_update_rederives_boundary_area_relationships_and_face_atomically
+    first_loop = create_rectangular_walls(0, 0, 4000, 3000)
+    second_loop = create_rectangular_walls(10_000, 0, 5000, 2000)
+    created = HomeCAD::Architecture.create_room(@model, 'name' => 'Replaceable', 'wall_ids' => first_loop)
+    room_id = created.dig('created', 0, 'identity', 'homecad_id')
+    room = room_entity(room_id)
+    before = HomeCAD::ArchitectureData.read_params(room)
+    old_revision = HomeCAD::Metadata.read(room)['revision']
+    events_before = @model.events.length
+
+    result = HomeCAD::Architecture.update_object(@model,
+      'target' => { 'homecad_id' => room_id }, 'changes' => { 'wall_ids' => second_loop })
+    after = HomeCAD::ArchitectureData.read_params(room)
+    expected_boundary = [[10_000, 0, 0], [15_000, 0, 0], [15_000, 2000, 0], [10_000, 2000, 0]]
+    expected_relationships = HomeCAD::Architecture.room_relationships(after['room_sides'])
+
+    assert_equal room_id, result.dig('updated', 0, 'identity', 'homecad_id')
+    assert_equal room_id, HomeCAD::Metadata.read(room)['homecad_id']
+    assert_equal second_loop, after['wall_ids']
+    assert_equal expected_boundary, after['boundary_mm']
+    assert_in_delta 10_000_000, after['approx_area_mm2'], 1e-6
+    assert_equal second_loop, after['room_sides'].map(&:first)
+    assert_equal expected_relationships, HomeCAD::ArchitectureData.read_relationships(room)
+    assert_points_equal expected_boundary, room_face_points(room)
+    assert_equal old_revision + 1, HomeCAD::Metadata.read(room)['revision']
+    assert_equal events_before + 2, @model.events.length
+    assert_equal %i[start commit], @model.events.last(2).map(&:first)
+
+    geometry_before_failure = room_face_points(room)
+    params_before_failure = HomeCAD::ArchitectureData.read_params(room)
+    relationships_before_failure = HomeCAD::ArchitectureData.read_relationships(room)
+    revision_before_failure = HomeCAD::Metadata.read(room)['revision']
+    event_count_before_failure = @model.events.length
+    error = assert_raises(HomeCAD::Runtime::BridgeError) do
+      HomeCAD::Architecture.update_object(@model,
+        'target' => { 'homecad_id' => room_id }, 'changes' => { 'wall_ids' => second_loop.take(3) })
+    end
+    assert_equal 'constraint_violation', error.category
+    assert_equal params_before_failure, HomeCAD::ArchitectureData.read_params(room)
+    assert_equal relationships_before_failure, HomeCAD::ArchitectureData.read_relationships(room)
+    assert_equal revision_before_failure, HomeCAD::Metadata.read(room)['revision']
+    assert_equal geometry_before_failure, room_face_points(room)
+    assert_equal event_count_before_failure, @model.events.length
+    assert_equal before['name'], HomeCAD::ArchitectureData.read_params(room)['name']
+  end
+
+  def test_reversing_wall_direction_refreshes_room_sides_relationships_and_revisions
+    walls = create_rectangular_walls(0, 0, 4000, 3000)
+    room_id = HomeCAD::Architecture.create_room(@model, 'name' => 'Direction', 'wall_ids' => walls)
+      .dig('created', 0, 'identity', 'homecad_id')
+    room = room_entity(room_id)
+    wall = room_entity(walls.first)
+    old_params = HomeCAD::ArchitectureData.read_params(room)
+    old_room_revision = HomeCAD::Metadata.read(room)['revision']
+    old_wall_revision = HomeCAD::Metadata.read(wall)['revision']
+    before_events = @model.events.length
+
+    HomeCAD::Architecture.update_object(@model, 'target' => { 'homecad_id' => walls.first },
+      'changes' => { 'start_mm' => [4000, 0, 0], 'end_mm' => [0, 0, 0] })
+
+    new_params = HomeCAD::ArchitectureData.read_params(room)
+    relationships = HomeCAD::ArchitectureData.read_relationships(room)
+    assert_equal old_params['boundary_mm'], new_params['boundary_mm']
+    assert_equal old_params['approx_area_mm2'], new_params['approx_area_mm2']
+    assert_equal 'positive_v', old_params['room_sides'].find { |id, _| id == walls.first }.last
+    assert_equal 'negative_v', new_params['room_sides'].find { |id, _| id == walls.first }.last
+    assert_equal HomeCAD::Architecture.room_relationships(new_params['room_sides']), relationships
+    assert_equal new_params['room_sides'].to_h { |id, side| ["wall_#{id}", side] }, relationships
+    assert_points_equal new_params['boundary_mm'], room_face_points(room)
+    assert_equal old_room_revision + 1, HomeCAD::Metadata.read(room)['revision']
+    assert_equal old_wall_revision + 1, HomeCAD::Metadata.read(wall)['revision']
+    assert_equal before_events + 2, @model.events.length
+    assert_equal %i[start commit], @model.events.last(2).map(&:first)
+  end
+
+  def test_valid_wall_relocation_rederives_room_state_and_invalid_relocation_is_atomic
+    walls = create_rectangular_walls(0, 0, 4000, 3000)
+    room_id = HomeCAD::Architecture.create_room(@model, 'name' => 'Relocate', 'wall_ids' => walls)
+      .dig('created', 0, 'identity', 'homecad_id')
+    room = room_entity(room_id)
+    wall = room_entity(walls.first)
+    area_before = HomeCAD::ArchitectureData.read_params(room)['approx_area_mm2']
+    room_revision = HomeCAD::Metadata.read(room)['revision']
+    wall_revision = HomeCAD::Metadata.read(wall)['revision']
+
+    HomeCAD::Architecture.update_object(@model, 'target' => { 'homecad_id' => walls.first },
+      'changes' => { 'start_mm' => [0, 0.5, 0], 'end_mm' => [4000, 0.5, 0] })
+    moved_params = HomeCAD::ArchitectureData.read_params(room)
+    assert_equal walls, moved_params['wall_ids']
+    assert_equal walls, moved_params['room_sides'].map(&:first)
+    assert_in_delta 11_999_000, moved_params['approx_area_mm2'], 1e-6
+    refute_equal area_before, moved_params['approx_area_mm2']
+    assert_equal HomeCAD::Architecture.room_relationships(moved_params['room_sides']),
+      HomeCAD::ArchitectureData.read_relationships(room)
+    assert_points_equal moved_params['boundary_mm'], room_face_points(room)
+    assert_equal room_revision + 1, HomeCAD::Metadata.read(room)['revision']
+    assert_equal wall_revision + 1, HomeCAD::Metadata.read(wall)['revision']
+
+    params_before = HomeCAD::ArchitectureData.read_params(room)
+    relationships_before = HomeCAD::ArchitectureData.read_relationships(room)
+    room_revision_before = HomeCAD::Metadata.read(room)['revision']
+    wall_params_before = HomeCAD::ArchitectureData.read_params(wall)
+    wall_revision_before = HomeCAD::Metadata.read(wall)['revision']
+    geometry_before = room_face_points(room)
+    event_count_before = @model.events.length
+    error = assert_raises(HomeCAD::Runtime::BridgeError) do
+      HomeCAD::Architecture.update_object(@model, 'target' => { 'homecad_id' => walls.first },
+        'changes' => { 'start_mm' => [0, 2.5, 0], 'end_mm' => [4000, 2.5, 0] })
+    end
+    assert_equal 'constraint_violation', error.category
+    assert_equal params_before, HomeCAD::ArchitectureData.read_params(room)
+    assert_equal relationships_before, HomeCAD::ArchitectureData.read_relationships(room)
+    assert_equal room_revision_before, HomeCAD::Metadata.read(room)['revision']
+    assert_equal geometry_before, room_face_points(room)
+    assert_equal wall_params_before, HomeCAD::ArchitectureData.read_params(wall)
+    assert_equal wall_revision_before, HomeCAD::Metadata.read(wall)['revision']
+    assert_equal event_count_before, @model.events.length
   end
 
   def test_detect_rooms_is_read_only_and_finds_simple_loop

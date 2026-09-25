@@ -422,7 +422,7 @@ Codex должен иметь возможность:
 
 # 9. Этап 2 — Primitive Geometry
 
-**Статус: реализован в версии 0.4.0.** Контракт и ограничения зафиксированы в [tests/contracts/m2.md](tests/contracts/m2.md) и [docs/M2_DECISIONS.md](docs/M2_DECISIONS.md). Следующий milestone M3 не входит в текущую реализацию.
+**M2 реализован в версии 0.4.0; M2.1 Geometry Correctness — hardening до M3.** Контракт и ограничения зафиксированы в [tests/contracts/m2.md](tests/contracts/m2.md) и [docs/M2_DECISIONS.md](docs/M2_DECISIONS.md). M2.1 уточняет difference, world-space `push_pull` и cleanup пути Follow Me; M3 Architecture начинается после его завершения.
 
 Добавить fallback tools:
 

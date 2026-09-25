@@ -17,7 +17,7 @@ uv sync --project mcp
 uv run --project mcp python scripts/build_rbz.py
 ```
 
-Install `dist\homecad.rbz` with **SketchUp → Extensions → Extension Manager → Install Extension**, then restart SketchUp. The Ruby Console should show `[HomeCAD] INFO listening on 127.0.0.1:37941`. Confirm that `homecad_status.ruby_extension_version` says `0.4.0` and that it advertises `geometry.primitive.v1` before running the M2 smoke test.
+Install `dist\homecad.rbz` with **SketchUp → Extensions → Extension Manager → Install Extension**, then restart SketchUp. The Ruby Console should show `[HomeCAD] INFO listening on 127.0.0.1:37941`. Confirm that `homecad_status.ruby_extension_version` says `0.4.1` and that it advertises `geometry.primitive.v1` before running the M2 smoke test.
 
 The M0 connection check remains available:
 
@@ -48,17 +48,17 @@ The full request and response shape is in [the M1 contract](tests/contracts/m1.m
 
 ## Primitive geometry (M2)
 
-Primitive tools are a low-level fallback. Public coordinates and lengths use millimeters, angles use degrees, points are `[x_mm, y_mm, z_mm]`, and all M2 points use world coordinates. Created objects are each contained by a managed root Group with a HomeCAD UUID. `push_pull` and `follow_me` accept only an unambiguous Face inside a root Group; shared component definitions are rejected. `transform_object` accepts root Groups and component instances. Boolean operations require manifold solids, create a new managed result, and preserve the source objects. Every call runs as one SketchUp operation and returns the shared `status/operation/created/updated/deleted/warnings/revision` envelope.
+Primitive tools are a low-level fallback. Public coordinates and lengths use millimeters, angles use degrees, points are `[x_mm, y_mm, z_mm]`, and all M2 points use world coordinates. Created objects are each contained by a managed root Group with a HomeCAD UUID. `push_pull` and `follow_me` accept only an unambiguous Face inside a root Group; shared component definitions are rejected. `push_pull` also rejects parent transforms containing scale, shear, or reflection so the requested millimeter distance remains correct in world space. `transform_object` accepts root Groups and component instances. Boolean operations require manifold solids, create a new managed result, and preserve both sources. `difference` means exactly `target - tool` and uses `split`'s documented `self - other` result. Boolean temporary copies and unused split results are removed before commit. Follow Me removes path edges only when they have no attached faces; edges shared with swept surfaces remain as topology and are reported in `warnings`. Every call runs as one SketchUp operation and returns the shared `status/operation/created/updated/deleted/warnings/revision` envelope.
 
 MCP clients must check `geometry.primitive.v1`. Creation calls are non-idempotent; target mutations are destructive hints. Annotations are advisory only.
 
-Run the mutating smoke only after opening a disposable/test model. It creates a 600 × 560 × 720 mm box, moves it, captures an iso image, and invokes native Undo twice:
+Run the mutating smoke only after opening a disposable/test model. It checks box transform/Undo, asymmetric boolean subtraction, ordinary push/pull, scaled push/pull rejection, and an L-shaped Follow Me operation. It captures screenshots and undoes every created object:
 
 ```powershell
 uv run --project mcp python scripts/smoke_m2.py --confirm-disposable
 ```
 
-The screenshot is written to `dist\m2-smoke.png`. The script reports the model's modified state before and after; confirm it manually against the initial state.
+Screenshots are written under `dist\m2-smoke*.png`. The script reports model modified state before and after and verifies test objects are gone. If cleanup fails, it reports that the disposable model may still contain test geometry.
 
 MCP tools advertise standard behavior annotations: inspection and capture are read-only; `undo` is marked as state-changing and potentially destructive. These hints help clients present tools accurately but do not enforce safety.
 

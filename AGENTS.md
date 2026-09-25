@@ -32,3 +32,4 @@ HomeCAD architecture invariants
 - Prefer first-class HomeCAD domain tools. Primitive tools are fallback or developer capabilities, not the main domain API.
 - If introduced later, `eval_ruby` is an escape hatch and must not be used for normal workflows.
 - Read reference repository licenses before copying code.
+- Do not copy AGPL code from SidhNor/sketchup-mcp-server. It may be used only as an architectural reference unless licensing is explicitly reconsidered.

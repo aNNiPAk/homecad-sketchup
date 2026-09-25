@@ -92,6 +92,50 @@ async def test_python_to_ruby_bridge():
 
 
 @pytest.mark.asyncio
+async def test_m2_create_box_find_get_transform_get_cross_language():
+    ruby = shutil.which("ruby")
+    if ruby is None:
+        pytest.skip("Ruby executable unavailable")
+    process = await asyncio.create_subprocess_exec(
+        ruby, "tests/ruby/bridge_fixture.rb", cwd=ROOT,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        port = int(await asyncio.wait_for(process.stdout.readline(), 5))
+        client = BridgeClient(Config(port=port))
+        result = await client.call("create_box", {"width_mm": 600, "depth_mm": 560,
+                                                    "height_mm": 720, "origin_mm": [100, 200, 30]})
+        assert result["status"] == "success"
+        assert result["operation"] == "create_box"
+        assert result["revision"] == 1
+        created = result["created"][0]
+        homecad_id = created["identity"]["homecad_id"]
+        assert homecad_id
+        assert created["metadata"]["type"] == "primitive.box"
+
+        found = await client.call("find_objects", {"homecad_id": homecad_id})
+        assert found["resolution"] == "unique"
+        target = found["objects"][0]["identity"]
+        before = await client.call("get_object", {"target": {"homecad_id": homecad_id}})
+        assert before["bbox_dimensions_mm"] == pytest.approx({"width": 600, "depth": 560, "height": 720})
+
+        moved = await client.call("transform_object", {
+            "target": target, "transform": {"type": "translate", "vector_mm": [100, -50, 25]}})
+        assert moved["status"] == "success"
+        assert moved["revision"] == 2
+        after = await client.call("get_object", {"target": {"homecad_id": homecad_id}})
+        assert after["identity"]["homecad_id"] == homecad_id
+        assert after["metadata"]["revision"] == 2
+        assert after["bbox_dimensions_mm"] == before["bbox_dimensions_mm"]
+        for before_axis, delta in zip(("x", "y", "z"), (100, -50, 25)):
+            assert after["bbox_mm"]["min"][{"x": 0, "y": 1, "z": 2}[before_axis]] == pytest.approx(
+                before["bbox_mm"]["min"][{"x": 0, "y": 1, "z": 2}[before_axis]] + delta)
+    finally:
+        process.terminate()
+        await process.wait()
+
+
+@pytest.mark.asyncio
 async def test_mcp_stdio_starts_and_lists_m1_tools():
     # No SketchUp process is required to initialize the MCP server.
     params = StdioServerParameters(
@@ -105,7 +149,10 @@ async def test_mcp_stdio_starts_and_lists_m1_tools():
             tools = await session.list_tools()
             assert {tool.name for tool in tools.tools} == {
                 "homecad_status", "get_model_info", "list_objects", "find_objects",
-                "get_object", "get_selection", "measure", "capture_view", "undo"}
+                "get_object", "get_selection", "measure", "capture_view", "undo",
+                "create_group", "create_face", "create_edge", "create_box", "create_circle",
+                "create_arc", "create_polygon", "push_pull", "follow_me", "transform_object",
+                "boolean_operation"}
             status = await session.call_tool("homecad_status", {})
             assert not status.isError
             assert json.loads(status.content[0].text)["connection_status"] == "disconnected"

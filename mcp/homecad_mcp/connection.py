@@ -22,6 +22,17 @@ METHOD_CAPABILITIES = {
     "measure": "scene.measure.v1",
     "capture_view": "view.capture.v1",
     "undo": "scene.undo.v1",
+    "create_group": "geometry.primitive.v1",
+    "create_face": "geometry.primitive.v1",
+    "create_edge": "geometry.primitive.v1",
+    "create_box": "geometry.primitive.v1",
+    "create_circle": "geometry.primitive.v1",
+    "create_arc": "geometry.primitive.v1",
+    "create_polygon": "geometry.primitive.v1",
+    "push_pull": "geometry.primitive.v1",
+    "follow_me": "geometry.primitive.v1",
+    "transform_object": "geometry.primitive.v1",
+    "boolean_operation": "geometry.primitive.v1",
 }
 
 
@@ -71,7 +82,10 @@ class BridgeClient:
 
     async def call(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         if method not in ("homecad_status", "get_model_info", "list_objects", "find_objects",
-                          "get_object", "get_selection", "measure", "capture_view", "undo"):
+                          "get_object", "get_selection", "measure", "capture_view", "undo",
+                          "create_group", "create_face", "create_edge", "create_box",
+                          "create_circle", "create_arc", "create_polygon", "push_pull",
+                          "follow_me", "transform_object", "boolean_operation"):
             raise BridgeError("unsupported_operation", f"unsupported method: {method}")
         try:
             async with asyncio.timeout(self.config.timeout):

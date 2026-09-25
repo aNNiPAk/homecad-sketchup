@@ -7,6 +7,7 @@ module HomeCAD
         scene.measure.v1
         view.capture.v1
         scene.undo.v1
+        geometry.primitive.v1
       ].freeze
 
       def self.dispatch(request, handshake_done:)
@@ -30,6 +31,10 @@ module HomeCAD
         when 'measure' then Measurement.measure(active_model!, params)
         when 'capture_view' then Capture.capture(active_model!, params)
         when 'undo' then undo(active_model!, params)
+        when 'create_group', 'create_face', 'create_edge', 'create_box', 'create_circle', 'create_arc', 'create_polygon'
+          Primitives.dispatch(active_model!, method, params)
+        when 'push_pull', 'follow_me', 'transform_object', 'boolean_operation'
+          Mutations.dispatch(active_model!, method, params)
         else
           raise BridgeError.new(-32601, 'unsupported_operation', "unknown method: #{method}")
         end

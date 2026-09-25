@@ -55,7 +55,7 @@ module Sketchup
     def add_points(points) = (@points ||= []).concat(points)
     def transform!(_transformation) = true
     def bounds
-      pts = entities.flat_map { |face| face.points } + Array(@points)
+      pts = entities.flat_map { |entity| entity.respond_to?(:points) ? entity.points : (entity.respond_to?(:position) ? [entity.position] : []) } + Array(@points)
       return nil if pts.empty?
       Box.new(pts)
     end
@@ -98,6 +98,23 @@ module Sketchup
     end
     def typename = 'Edge'
   end
+  class ConstructionPoint
+    attr_reader :position, :persistent_id, :entityID
+    attr_accessor :hidden, :casts_shadows
+    def initialize(model, position)
+      @position = position
+      @persistent_id = @entityID = model.next_id
+    end
+    def typename = 'ConstructionPoint'
+    def valid? = true
+    def deleted? = false
+    def hidden? = !!hidden
+    def visible? = !hidden?
+    def locked? = false
+    def layer = nil
+    def material = nil
+    def attribute_dictionary(*) = nil
+  end
   class Entities < Array
     attr_reader :owner
     def initialize(owner) = (@owner = owner; super())
@@ -116,6 +133,11 @@ module Sketchup
       edge = Edge.new([first, last])
       self << edge
       edge
+    end
+    def add_cpoint(position)
+      point = ConstructionPoint.new(owner.model, position)
+      self << point
+      point
     end
     def clear! = (clear; true)
     def erase_entities(*items) = items.each { |item| delete(item); item.erase! if item.respond_to?(:erase!) }
@@ -325,6 +347,14 @@ class ArchitectureTest < Minitest::Test
     wall_entity = @model.entities.find { |entity| HomeCAD::Metadata.read(entity)['homecad_id'] == wall }
     assert_equal 'architecture.opening', HomeCAD::Metadata.read(opening_entity)['type']
     assert_equal 'architecture.door', HomeCAD::Metadata.read(door_entity)['type']
+    assert_equal 1, opening_entity.entities.length
+    assert_equal 1, door_entity.entities.length
+    assert opening_entity.entities.first.hidden?
+    assert door_entity.entities.first.hidden?
+    assert_equal opening.dig('created', 0, 'identity', 'homecad_id'),
+      HomeCAD::Targeting.identity(HomeCAD::Targeting.resolve_one(@model, { 'homecad_id' => opening.dig('created', 0, 'identity', 'homecad_id') }))['homecad_id']
+    assert_equal door.dig('created', 0, 'identity', 'homecad_id'),
+      HomeCAD::Targeting.identity(HomeCAD::Targeting.resolve_one(@model, { 'homecad_id' => door.dig('created', 0, 'identity', 'homecad_id') }))['homecad_id']
     assert_equal 0.0, HomeCAD::ArchitectureData.read_params(door_entity)['bottom_mm']
     assert_equal 3, HomeCAD::Metadata.read(wall_entity)['revision']
     assert_operator wall_entity.entities.length, :>, 6

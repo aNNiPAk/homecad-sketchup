@@ -27,6 +27,7 @@
 ## SketchUp API findings
 
 - `Sketchup::Entities#add_face` creates faces directly in a chosen drawing context, and `#erase_entities` removes selected generated entities. Wall geometry can therefore be created and regenerated inside the preserved root Group.
+- Empty hosted Groups are not a reliable persistent target in SketchUp. Opening, Door, and Niche carry a hidden `Sketchup::ConstructionPoint` anchor created with `Entities#add_cpoint`; wall regeneration relocates that anchor from the stored wall-local parameters. Window keeps its visible concept geometry.
 - `Sketchup::Group#split` returns `[other - self, self - other, intersection]`, but deletes both original operands and is unavailable in SketchUp Make. It is unsuitable for walls or semantic hosted cuts.
 - Group boolean APIs require manifold solids and are not used by the architecture wall generator.
 - `Geom::Transformation.axes(origin, xaxis, yaxis, zaxis)` represents the local frame for Group placement. Public coordinates remain millimeters and are converted only through `HomeCAD::Units`.
@@ -37,10 +38,11 @@
 Official API references:
 
 - [Sketchup::Entities](https://ruby.sketchup.com/Sketchup/Entities.html)
+- [Sketchup::ConstructionPoint](https://ruby.sketchup.com/Sketchup/ConstructionPoint.html)
 - [Sketchup::Group](https://ruby.sketchup.com/Sketchup/Group.html)
 - [Geom::Transformation](https://ruby.sketchup.com/Geom/Transformation.html)
 
-Real-kernel acceptance remains a manual step. The current SketchUp 26.2.243 connection reports the installed extension as 0.4.2 and does not advertise `architecture.core.v1`; the M3 RBZ was built and packaging-checked, but was not installed during this implementation run.
+The installed SketchUp 26.2.243 extension was updated to 0.5.0 and advertises `architecture.core.v1`. The first real M3 smoke confirmed wall creation/frame and camera restoration, then exposed that an empty Door Group could not be resolved. Its cleanup restored the initially empty, unmodified model. After adding hidden construction-point anchors, the full M3 smoke passed on a disposable copy of the installed `Tutorial01.skp`: wall/window/door/niche and four-wall Room creation, wall rotation, invalid shortening rejection, `detect_rooms`, target capture/camera restoration, Undo cleanup, and no remaining smoke IDs. The model's `modified` flag was false both before and after cleanup. The copied sample's existing tutorial geometry remains visible in captured images, so those screenshots are useful for bridge/image validation but are not clean presentation images.
 
 ## References reviewed
 

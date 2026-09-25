@@ -326,7 +326,11 @@ module HomeCAD
         group.name = params['name'] if params['name']
         Metadata.create!(group, type: type)
         ArchitectureData.write(group, params: normalized, relationships: { 'wall_id' => wall_metadata['homecad_id'] })
-        create_window_visual!(group, normalized_wall, normalized) if type == 'architecture.window'
+        if type == 'architecture.window'
+          create_window_visual!(group, normalized_wall, normalized)
+        else
+          create_host_marker!(group, normalized_wall, normalized)
+        end
         cuts = candidates + [normalized]
         regenerate_wall!(wall, normalized_wall, cuts)
         Metadata.increment_revision!(wall)
@@ -426,9 +430,14 @@ module HomeCAD
           regenerate_wall!(group, proposed, cuts)
           hosts = hosted_for(model, data['homecad_id'])
           hosts.each do |host|
-            next unless Metadata.read(host)['type'] == 'architecture.window'
             host.entities.clear!
-            create_window_visual!(host, proposed, ArchitectureData.read_params(host))
+            host_type = Metadata.read(host)['type']
+            host_params = ArchitectureData.read_params(host)
+            if host_type == 'architecture.window'
+              create_window_visual!(host, proposed, host_params)
+            else
+              create_host_marker!(host, proposed, host_params)
+            end
           end
           updated.concat(hosts)
           rooms_to_update.each do |room, room_params|
@@ -438,9 +447,11 @@ module HomeCAD
           end
         when *HOSTED_TYPES
           ArchitectureData.write(group, params: proposed, relationships: { 'wall_id' => data['wall_id'] })
+          group.entities.clear!
           if type == 'architecture.window'
-            group.entities.clear!
             create_window_visual!(group, ArchitectureData.read_params(wall), proposed)
+          else
+            create_host_marker!(group, ArchitectureData.read_params(wall), proposed)
           end
           cuts = hosted_for(model, data['wall_id']).map { |host| ArchitectureData.read_params(host).merge('type' => Metadata.read(host)['type']) }
           regenerate_wall!(wall, ArchitectureData.read_params(wall), cuts)
@@ -666,6 +677,25 @@ module HomeCAD
         Primitives.geometry_created!(group.entities.add_line(first, last), 'SketchUp could not create window frame')
       end
       group
+    end
+
+    # Empty semantic Groups are not reliably retained/indexed by SketchUp. Keep a hidden
+    # construction point at the hosted object's local anchor so its identity remains resolvable.
+    def self.create_host_marker!(group, wall_params, host_params)
+      frame, wall = validate_wall_params!(wall_params)
+      half = wall['thickness_mm'] / 2.0
+      v = case host_params['side']
+          when 'positive_v' then half - 0.5
+          when 'negative_v' then -half + 0.5
+          else host_params.fetch('depth_offset_mm', 0.0)
+          end
+      point_mm = frame.local_to_world(host_params['offset_mm'] + host_params['width_mm'] / 2.0,
+        v, host_params['bottom_mm'] + host_params['height_mm'] / 2.0)
+      marker = group.entities.add_cpoint(Geometry.point_mm(point_mm, 'host.anchor'))
+      Primitives.geometry_created!(marker, 'SketchUp could not create hosted object anchor')
+      marker.hidden = true if marker.respond_to?(:hidden=)
+      marker.casts_shadows = false if marker.respond_to?(:casts_shadows=)
+      marker
     end
 
     def self.mutation_result(operation, created: [], updated: [], revision:)

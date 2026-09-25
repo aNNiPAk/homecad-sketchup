@@ -16,23 +16,48 @@ module Geom
       @z *= factor
     end
     def cross(other) = Vector3d.new(y * other.z - z * other.y, z * other.x - x * other.z, x * other.y - y * other.x)
+    def dot(other) = x * other.x + y * other.y + z * other.z
     def parallel?(other) = cross(other).length < 1e-9
   end
   class Transformation
-    attr_reader :offset
-    def initialize(offset = [0, 0, 0]) = (@offset = offset)
+    attr_reader :offset, :xaxis, :yaxis, :zaxis
+    def initialize(offset = [0, 0, 0], axes = nil)
+      @offset = offset
+      @xaxis, @yaxis, @zaxis = axes || [Vector3d.new(1, 0, 0), Vector3d.new(0, 1, 0), Vector3d.new(0, 0, 1)]
+    end
     def self.translation(vector) = new([vector.x, vector.y, vector.z])
-    def self.rotation(*) = new
-    def self.scaling(*) = new
+    def self.rotation(_point, _axis, angle)
+      cosine, sine = Math.cos(angle), Math.sin(angle)
+      new([0, 0, 0], [Vector3d.new(cosine, sine, 0), Vector3d.new(-sine, cosine, 0), Vector3d.new(0, 0, 1)])
+    end
+    def self.scaling(_point, x, y, z) = new([0, 0, 0], [Vector3d.new(x, 0, 0), Vector3d.new(0, y, 0), Vector3d.new(0, 0, z)])
     def *(other)
+      if other.is_a?(Vector3d)
+        return Vector3d.new(xaxis.x * other.x + yaxis.x * other.y + zaxis.x * other.z,
+                            xaxis.y * other.x + yaxis.y * other.y + zaxis.y * other.z,
+                            xaxis.z * other.x + yaxis.z * other.y + zaxis.z * other.z)
+      end
       if other.is_a?(Point3d)
-        Point3d.new(other.x + offset[0], other.y + offset[1], other.z + offset[2])
+        Point3d.new(xaxis.x * other.x + yaxis.x * other.y + zaxis.x * other.z + offset[0],
+                    xaxis.y * other.x + yaxis.y * other.y + zaxis.y * other.z + offset[1],
+                    xaxis.z * other.x + yaxis.z * other.y + zaxis.z * other.z + offset[2])
       else
-        Transformation.new(offset.zip(other.offset).map(&:sum))
+        origin = self * Point3d.new(*other.offset)
+        Transformation.new([origin.x, origin.y, origin.z],
+          [self * other.xaxis, self * other.yaxis, self * other.zaxis])
       end
     end
-    def inverse = Transformation.new(offset.map { |value| -value })
-    def to_a = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, *offset, 1]
+    def inverse
+      inverse_axes = [
+        Vector3d.new(xaxis.x, yaxis.x, zaxis.x),
+        Vector3d.new(xaxis.y, yaxis.y, zaxis.y),
+        Vector3d.new(xaxis.z, yaxis.z, zaxis.z)
+      ]
+      inverse_offset = inverse_axes.map { |axis| -(axis.x * offset[0] + axis.y * offset[1] + axis.z * offset[2]) }
+      Transformation.new(inverse_offset, inverse_axes)
+    end
+    def to_a = [xaxis.x, yaxis.x, zaxis.x, 0, xaxis.y, yaxis.y, zaxis.y, 0,
+                xaxis.z, yaxis.z, zaxis.z, 0, *offset, 1]
   end
 end
 
@@ -99,11 +124,17 @@ class MutationEntity
   def hidden? = false
   def layer = nil
   def material = nil
-  def erase! = (@valid = false)
+  def erase!
+    @valid = false
+    collection = parent.respond_to?(:entities) ? parent.entities : parent
+    collection.delete(self) if collection.respond_to?(:delete)
+    true
+  end
   def attribute_dictionary(name, _create = false) = @attributes[name]
   def set_attribute(dictionary, key, value) = (@attributes[dictionary] ||= {})[key] = value
   def points = @points
   def add_points(points) = @points.concat(points)
+  def replace_points(points) = (@points = points)
   def bounds = @points.empty? ? nil : MutationBounds.new(@points)
 end
 
@@ -128,13 +159,11 @@ module Sketchup
     end
     def union(_other) = MutationBoolean.make_result(model)
     def intersect(_other) = MutationBoolean.make_result(model)
-    def trim(_other)
-      MutationBoolean.receiver = :target_minus_tool
-      MutationBoolean.make_result(model)
-    end
+    def split(other) = MutationBoolean.split(self, other)
   end
   class ComponentInstance < Group; end
   class Face < MutationEntity
+    attr_accessor :fail_follow, :retain_path
     def initialize(id, model, parent, points)
       super(id, 'Face', model, parent, points)
       parent.add_points(points)
@@ -145,12 +174,19 @@ module Sketchup
       parent.add_points(created)
       nil
     end
-    def followme(edges) = !edges.empty?
+    def followme(edges)
+      return false if edges.empty?
+      parent.add_points(edges.flat_map(&:points))
+      edges.each { |edge| edge.faces = [self] } if retain_path
+      !fail_follow
+    end
   end
   class Edge < MutationEntity
+    attr_accessor :faces
     def initialize(id, model, parent, points)
       super(id, 'Edge', model, parent, points)
     end
+    def faces = @faces || []
   end
   class Model
     attr_reader :entities, :events
@@ -164,7 +200,8 @@ module Sketchup
     end
     def start_operation(name, *)
       @events << [:start, name]
-      @snapshot = entities.length
+      @snapshot = entities.dup
+      @nested_snapshot = entities.to_h { |group| [group, [group.entities.dup, group.points.dup]] }
       true
     end
     def commit_operation
@@ -173,7 +210,11 @@ module Sketchup
     end
     def abort_operation
       @events << [:abort]
-      entities.slice!(@snapshot..)
+      entities.replace(@snapshot)
+      @nested_snapshot.each do |group, (children, points)|
+        group.entities.replace(children)
+        group.replace_points(points)
+      end
       true
     end
   end
@@ -185,10 +226,30 @@ end
 
 module MutationBoolean
   class << self
-    attr_accessor :receiver, :argument
+    attr_accessor :receiver, :argument, :fail_split
     def make_result(model)
       self.receiver ||= nil
       model.entities.add_group.tap { |group| group.add_points([Geom::Point3d.new(0, 0, 0), Geom::Point3d.new(1, 1, 1)]) }
+    end
+
+    # Match documented SketchUp ordering: [other - self, self - other, intersection].
+    def split(target, tool)
+      return nil if fail_split
+      target_bounds, tool_bounds = target.bounds, tool.bounds
+      target_min, target_max = target_bounds.min, target_bounds.max
+      tool_min, tool_max = tool_bounds.min, tool_bounds.max
+      diff2 = box(target.model, [target_max.x, target_min.y, target_min.z], [tool_max.x, target_max.y, target_max.z])
+      diff1 = box(target.model, [target_min.x, target_min.y, target_min.z], [tool_min.x, target_max.y, target_max.z])
+      intersection = box(target.model, [tool_min.x, target_min.y, target_min.z], [target_max.x, target_max.y, target_max.z])
+      target.erase!
+      tool.erase!
+      self.receiver = [diff2, diff1, intersection]
+    end
+
+    def box(model, minimum, maximum)
+      group = model.entities.add_group
+      group.add_points([Geom::Point3d.new(*minimum), Geom::Point3d.new(*maximum)])
+      group
     end
   end
 end
@@ -209,6 +270,8 @@ class MutationsTest < Minitest::Test
   def setup
     @model = Sketchup::Model.new
     Sketchup.active_model = @model
+    MutationBoolean.receiver = nil
+    MutationBoolean.fail_split = false
     @group = @model.entities.add_group
     HomeCAD::Metadata.create!(@group, type: 'primitive.box')
     @group.add_points([Geom::Point3d.new(0, 0, 0), Geom::Point3d.new(100.0 / 25.4, 100.0 / 25.4, 0)])
@@ -286,7 +349,45 @@ class MutationsTest < Minitest::Test
     assert_in_delta 25.4, result.dig('updated', 0, 'bbox_dimensions_mm', 'height'), 1e-9
   end
 
-  def test_follow_me_creates_bounded_path_in_the_face_context
+  def test_push_pull_rejects_uniform_nonuniform_shear_and_mirror_before_operation
+    resolve_to(@face_entry)
+    transforms = [
+      Geom::Transformation.scaling(Geom::Point3d.new(0, 0, 0), 2, 2, 2),
+      Geom::Transformation.scaling(Geom::Point3d.new(0, 0, 0), 2, 3, 4),
+      Geom::Transformation.new([0, 0, 0], [Geom::Vector3d.new(1, 0, 0),
+        Geom::Vector3d.new(0.5, 1, 0), Geom::Vector3d.new(0, 0, 1)]),
+      Geom::Transformation.scaling(Geom::Point3d.new(0, 0, 0), -1, 1, 1)
+    ]
+    transforms.each do |transformation|
+      @group.transformation = transformation
+      error = assert_raises(HomeCAD::Runtime::BridgeError) do
+        HomeCAD::Mutations.push_pull(@model,
+          'target' => { 'persistent_id' => @face.persistent_id }, 'distance_mm' => 25.4)
+      end
+      assert_equal 'constraint_violation', error.category
+      assert_empty @model.events
+      assert_equal 1, HomeCAD::Metadata.read(@group)['revision']
+    end
+  end
+
+  def test_push_pull_allows_rigid_translation_and_rotation
+    transforms = [
+      Geom::Transformation.translation(Geom::Vector3d.new(10, 20, 30)),
+      Geom::Transformation.rotation(Geom::Point3d.new(0, 0, 0),
+        Geom::Vector3d.new(0, 0, 1), Math::PI / 3)
+    ]
+    transforms.each_with_index do |transformation, index|
+      @group.transformation = transformation
+      resolve_to(@face_entry)
+      result = HomeCAD::Mutations.push_pull(@model,
+        'target' => { 'persistent_id' => @face.persistent_id }, 'distance_mm' => 25.4)
+      assert_equal index + 2, result['revision']
+      assert_equal %i[start commit], @model.events.map(&:first)
+      @model.events.clear
+    end
+  end
+
+  def test_follow_me_removes_unreferenced_helper_path_edges
     resolve_to(@face_entry)
     result = HomeCAD::Mutations.follow_me(@model,
       'target' => { 'persistent_id' => @face.persistent_id },
@@ -294,14 +395,54 @@ class MutationsTest < Minitest::Test
     assert_equal 'success', result['status']
     assert_equal 2, result['revision']
     assert_equal %i[start commit], @model.events.map(&:first)
-    assert_equal 1, @group.entities.grep(Sketchup::Edge).length
+    assert_empty @group.entities.grep(Sketchup::Edge)
+    assert_empty result['warnings']
   end
 
-  def test_boolean_difference_uses_target_minus_tool_and_preserves_inputs
+  def test_follow_me_keeps_path_edges_shared_with_swept_faces_and_warns
+    resolve_to(@face_entry)
+    @face.retain_path = true
+    result = HomeCAD::Mutations.follow_me(@model,
+      'target' => { 'persistent_id' => @face.persistent_id },
+      'path_points_mm' => [[0, 0, 0], [0, 0, 25.4]])
+    assert_equal 2, result['revision']
+    assert_equal 1, @group.entities.grep(Sketchup::Edge).length
+    assert_match(/retained as geometry boundaries/, result['warnings'].first)
+  end
+
+  def test_follow_me_failure_aborts_path_and_partial_sweep_without_revision
+    resolve_to(@face_entry)
+    @face.fail_follow = true
+    points_before = @group.points.dup
+    error = assert_raises(HomeCAD::Runtime::BridgeError) do
+      HomeCAD::Mutations.follow_me(@model,
+        'target' => { 'persistent_id' => @face.persistent_id },
+        'path_points_mm' => [[0, 0, 0], [0, 0, 25.4], [25.4, 0, 25.4]])
+    end
+    assert_equal 'geometry_error', error.category
+    assert_equal %i[start abort], @model.events.map(&:first)
+    assert_equal points_before, @group.points
+    assert_empty @group.entities.grep(Sketchup::Edge)
+    assert_equal 1, HomeCAD::Metadata.read(@group)['revision']
+  end
+
+  def test_follow_me_rejects_duplicate_path_points_before_operation
+    resolve_to(@face_entry)
+    error = assert_raises(HomeCAD::Runtime::BridgeError) do
+      HomeCAD::Mutations.follow_me(@model,
+        'target' => { 'persistent_id' => @face.persistent_id },
+        'path_points_mm' => [[0, 0, 0], [0.001, 0, 0]])
+    end
+    assert_equal 'invalid_request', error.category
+    assert_empty @model.events
+  end
+
+  def test_boolean_difference_selects_target_minus_tool_from_documented_split_order
     target = @group
+    target.replace_points([Geom::Point3d.new(0, 0, 0), Geom::Point3d.new(600.0 / 25.4, 400.0 / 25.4, 300.0 / 25.4)])
     tool = @model.entities.add_group
     HomeCAD::Metadata.create!(tool, type: 'primitive.box')
-    tool.add_points([Geom::Point3d.new(0, 0, 0), Geom::Point3d.new(10, 10, 10)])
+    tool.add_points([Geom::Point3d.new(300.0 / 25.4, 0, 0), Geom::Point3d.new(800.0 / 25.4, 400.0 / 25.4, 300.0 / 25.4)])
     target_entry = HomeCAD::Scene::Entry.new(entity: target, parent: nil,
                                               path: [target.persistent_id], transform: nil)
     tool_entry = HomeCAD::Scene::Entry.new(entity: tool, parent: nil,
@@ -316,6 +457,43 @@ class MutationsTest < Minitest::Test
     assert_equal 1, result['revision']
     assert target.valid?
     assert tool.valid?
-    assert_equal :target_minus_tool, MutationBoolean.receiver
+    boolean_result = result['created'][0]
+    assert_in_delta 300, boolean_result.dig('bbox_dimensions_mm', 'width'), 1e-6
+    assert_in_delta 0, boolean_result.dig('bbox_mm', 'min', 0), 1e-6
+    assert_equal 3, @model.entities.length, 'only the two sources and selected result remain'
+    assert_equal 3, MutationBoolean.receiver.length
+  end
+
+  def test_union_and_intersect_remain_available_and_boolean_failure_aborts
+    target_entry = @group_entry
+    tool = @model.entities.add_group
+    HomeCAD::Metadata.create!(tool, type: 'primitive.box')
+    tool.add_points([Geom::Point3d.new(0, 0, 0), Geom::Point3d.new(10, 10, 10)])
+    tool_entry = HomeCAD::Scene::Entry.new(entity: tool, parent: nil,
+      path: [tool.persistent_id], transform: nil)
+    HomeCAD::Targeting.define_singleton_method(:resolve_one) do |_model, selector|
+      selector['homecad_id'] == HomeCAD::Metadata.read(@group)['homecad_id'] ? target_entry : tool_entry
+    end
+    %w[union intersect].each do |operation|
+      result = HomeCAD::Mutations.boolean_operation(@model,
+        'target' => { 'homecad_id' => HomeCAD::Metadata.read(@group)['homecad_id'] },
+        'tool' => { 'persistent_id' => tool.persistent_id }, 'operation' => operation)
+      assert_equal 'primitive.boolean', result.dig('created', 0, 'metadata', 'type')
+    end
+    assert @group.valid?
+    assert tool.valid?
+
+    before = @model.entities.dup
+    MutationBoolean.fail_split = true
+    error = assert_raises(HomeCAD::Runtime::BridgeError) do
+      HomeCAD::Mutations.boolean_operation(@model,
+        'target' => { 'homecad_id' => HomeCAD::Metadata.read(@group)['homecad_id'] },
+        'tool' => { 'persistent_id' => tool.persistent_id }, 'operation' => 'difference')
+    end
+    assert_equal 'geometry_error', error.category
+    assert_equal %i[start commit start commit start abort], @model.events.map(&:first)
+    assert_equal before, @model.entities
+    assert @group.valid?
+    assert tool.valid?
   end
 end

@@ -21,6 +21,10 @@ module HomeCAD
       face = entry.entity
       MutationPolicy.require_type!(face, Sketchup::Face, 'target')
       group = nested_group!(entry, model)
+      unless Geometry.rigid_transform?(group.transformation)
+        raise Runtime::BridgeError.new(-32008, 'constraint_violation',
+          'push_pull distance_mm is world-space; the parent Group must not have scale, shear, or reflection')
+      end
       distance = Geometry.finite_number(params['distance_mm'], 'distance_mm')
       if distance.abs < Geometry::MIN_LENGTH_MM
         Primitives.invalid!('distance_mm magnitude must be at least 0.01')
@@ -49,6 +53,18 @@ module HomeCAD
         end
         result = face.followme(edges)
         Primitives.geometry_error!('SketchUp could not sweep the face along this path') unless result
+        retained_edges = edges.select do |edge|
+          next false if edge.respond_to?(:valid?) && !edge.valid?
+
+          if edge.respond_to?(:faces)
+            edge.faces.empty? ? (edge.erase!; false) : true
+          else
+            true
+          end
+        end
+        retained_edges.empty? ? [] : [
+          'Some follow_me path edges are shared with the swept geometry and were retained as geometry boundaries.'
+        ]
       end
     end
 
@@ -92,7 +108,7 @@ module HomeCAD
       end
       require_solid!(target, 'target')
       require_solid!(tool, 'tool')
-      method = { 'union' => :union, 'difference' => :trim, 'intersect' => :intersect }.fetch(operation)
+      method = { 'union' => :union, 'difference' => :split, 'intersect' => :intersect }.fetch(operation)
       unless target.respond_to?(method) && tool.respond_to?(method)
         raise Runtime::BridgeError.new(-32601, 'unsupported_operation', "SketchUp does not support #{operation}")
       end
@@ -104,9 +120,21 @@ module HomeCAD
           tool_copy = entities.add_instance(tool.definition, tool.transformation)
           Primitives.geometry_created!(target_copy, 'Could not copy boolean target')
           Primitives.geometry_created!(tool_copy, 'Could not copy boolean tool')
-          # Group#trim is the documented non-destructive target-minus-tool
-          # operation; Group#subtract has conflicting receiver/argument prose.
-          result = target_copy.public_send(method, tool_copy)
+          if operation == 'difference'
+            split = target_copy.split(tool_copy)
+            unless split.is_a?(Array) && split.length == 3
+              Primitives.geometry_error!('SketchUp split failed; both operands must be manifold solids')
+            end
+            # Documented order: [other - self, self - other, intersection].
+            result = split[1]
+            split.each_with_index do |part, index|
+              next if index == 1 || !part
+
+              part.erase! if part.respond_to?(:valid?) && part.valid?
+            end
+          else
+            result = target_copy.public_send(method, tool_copy)
+          end
           Primitives.geometry_error!("SketchUp #{operation} failed; both operands must be manifold solids") unless result
           Primitives.geometry_created!(result, "SketchUp #{operation} returned an invalid result")
           target_copy.erase! if target_copy.valid? && !target_copy.equal?(result)
@@ -124,10 +152,11 @@ module HomeCAD
 
     def self.run_update(model, operation, entity)
       HomeCAD::Operation.run(operation.tr('_', ' ').capitalize, model: model) do
-        yield
+        warnings = yield || []
         metadata = Metadata.increment_revision!(entity)
         serialized = serialize_root(entity)
-        MutationResult.success(operation: operation, updated: [serialized], revision: metadata['revision'])
+        MutationResult.success(operation: operation, updated: [serialized], warnings: warnings,
+                               revision: metadata['revision'])
       end
     rescue Runtime::BridgeError
       raise

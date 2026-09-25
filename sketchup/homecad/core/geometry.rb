@@ -3,6 +3,36 @@ module HomeCAD
     MAX_SEGMENTS = 512
     MAX_POINTS = 512
     MIN_LENGTH_MM = 0.01
+    RIGID_TRANSFORM_TOLERANCE = 1e-6
+
+    # Push/pull distances are public world-space millimeters. They are equal to
+    # the local distance only when the parent transform preserves lengths.
+    def self.rigid_transform?(transformation, tolerance: RIGID_TRANSFORM_TOLERANCE)
+      return false unless transformation.respond_to?(:to_a)
+
+      matrix = transformation.to_a
+      return false unless matrix.is_a?(Array) && matrix.length == 16 && matrix.all? { |value| value.is_a?(Numeric) && value.finite? }
+      return false unless [3, 7, 11].all? { |index| matrix[index].abs <= tolerance } &&
+                          (matrix[15] - 1.0).abs <= tolerance
+
+      # Geom::Transformation#xaxis/yaxis/zaxis report normalized directions.
+      # Read the linear columns from the documented 16-value matrix so scale is
+      # still visible, then test unit length, orthogonality, and handedness.
+      x_axis = Geom::Vector3d.new(*matrix.values_at(0, 1, 2))
+      y_axis = Geom::Vector3d.new(*matrix.values_at(4, 5, 6))
+      z_axis = Geom::Vector3d.new(*matrix.values_at(8, 9, 10))
+      axes = [x_axis, y_axis, z_axis]
+      return false unless axes.all? { |axis| axis.respond_to?(:length) && axis.length.finite? }
+      return false unless axes.all? { |axis| (axis.length - 1.0).abs <= tolerance }
+      return false unless x_axis.dot(y_axis).abs <= tolerance &&
+                          x_axis.dot(z_axis).abs <= tolerance && y_axis.dot(z_axis).abs <= tolerance
+
+      # Require a right-handed basis: reflections reverse its sign.
+      determinant = x_axis.cross(y_axis).dot(z_axis)
+      (determinant - 1.0).abs <= tolerance
+    rescue StandardError
+      false
+    end
 
     def self.finite_number(value, name)
       unless value.is_a?(Numeric) && value.finite?

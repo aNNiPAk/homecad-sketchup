@@ -130,6 +130,26 @@ class FurnitureTest < Minitest::Test
     assert_equal before_transform.to_a, cabinet.transformation.to_a
   end
 
+  def test_wall_direction_reversal_keeps_local_attachment_and_reframes_cabinet
+    wall_id = create_wall
+    result = HomeCAD::Furniture.create_cabinet(@model, 'width_mm' => 600, 'depth_mm' => 560,
+      'height_mm' => 720, 'placement' => { 'mode' => 'wall', 'wall_id' => wall_id,
+      'offset_mm' => 1000, 'bottom_mm' => 0, 'side' => 'positive_v', 'clearance_mm' => 10 })
+    cabinet_id = result.dig('created', 0, 'identity', 'homecad_id')
+    cabinet = @model.entities.find { |entity| HomeCAD::Metadata.read(entity)['homecad_id'] == cabinet_id }
+    update = HomeCAD::Architecture.update_object(@model, 'target' => { 'homecad_id' => wall_id },
+      'changes' => { 'start_mm' => [4000, 0, 0], 'end_mm' => [0, 0, 0] })
+    frame = HomeCAD::Furniture.get_frame(@model, 'target' => { 'homecad_id' => cabinet_id })
+    placement = HomeCAD::FurnitureData.read_params(cabinet)['placement']
+    assert_equal 1000.0, placement['offset_mm']
+    assert_equal 'positive_v', placement['side']
+    assert_equal [-1.0, 0.0, 0.0], frame['x_axis']
+    assert_equal [0.0, -1.0, 0.0], frame['y_axis']
+    assert_equal [3000.0, -70.0, 0.0], frame['origin_mm']
+    assert_equal 2, HomeCAD::Metadata.read(cabinet)['revision']
+    assert_equal 2, update.dig('updated').find { |entry| entry.dig('identity', 'homecad_id') == cabinet_id }.dig('metadata', 'revision')
+  end
+
   def test_delete_wall_requires_cascade_and_cascade_includes_cabinet
     wall_id = create_wall
     created = HomeCAD::Furniture.create_cabinet(@model, 'width_mm' => 600, 'depth_mm' => 560,

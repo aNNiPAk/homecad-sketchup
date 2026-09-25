@@ -13,6 +13,17 @@ from .errors import BridgeError
 
 logger = logging.getLogger(__name__)
 
+METHOD_CAPABILITIES = {
+    "get_model_info": "model.info.v1",
+    "list_objects": "scene.inspect.v1",
+    "find_objects": "scene.inspect.v1",
+    "get_object": "scene.inspect.v1",
+    "get_selection": "scene.inspect.v1",
+    "measure": "scene.measure.v1",
+    "capture_view": "view.capture.v1",
+    "undo": "scene.undo.v1",
+}
+
 
 def encode_frame(payload: dict[str, Any], limit: int) -> bytes:
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -84,7 +95,7 @@ class BridgeClient:
             })
             hello = check_response(await read_frame(reader, self.config.max_frame_bytes), 1)
             self._check_hello(hello)
-            self._check_method_version(method, hello)
+            self._check_method_capability(method, hello)
             await self._send(writer, {
                 "jsonrpc": "2.0", "id": 2, "method": method, "params": params,
             })
@@ -116,14 +127,21 @@ class BridgeClient:
             )
 
     @staticmethod
-    def _check_method_version(method: str, hello: dict[str, Any]) -> None:
-        if method != "capture_view":
+    def _check_method_capability(method: str, hello: dict[str, Any]) -> None:
+        required = METHOD_CAPABILITIES.get(method)
+        if required is None:
             return
-        version = tuple(int(part) for part in hello["ruby_extension_version"].split("."))
-        if version < (0, 2, 1):
+        capabilities = hello.get("capabilities", [])
+        if (not isinstance(capabilities, list)
+                or any(not isinstance(capability, str) or not capability for capability in capabilities)):
             raise BridgeError(
-                "incompatible_version",
-                "capture_view requires HomeCAD RBZ 0.2.1 or newer. Install the updated RBZ "
-                "and restart SketchUp before capturing a view.",
-                -32001,
+                "invalid_response",
+                "SketchUp bridge advertised malformed capabilities",
+            )
+        if required not in capabilities:
+            raise BridgeError(
+                "unsupported_operation",
+                f"SketchUp bridge does not advertise required capability '{required}' for '{method}'. "
+                "Install a HomeCAD RBZ that supports this operation and restart SketchUp.",
+                -32601,
             )

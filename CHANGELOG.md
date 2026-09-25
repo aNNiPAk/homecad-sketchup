@@ -15,6 +15,7 @@
 ### Added
 
 - Added MCP tool annotations for read-only scene inspection and state-changing native Undo.
+- Added advertised, versioned bridge capabilities and per-method Python capability checks; `homecad_status` remains available without feature capabilities.
 - M1 Scene Inspection: bounded `list_objects`, explicit `find_objects` resolution, normalized `get_object` and `get_selection`, and structured `measure`.
 - Top/front/back/left/right/iso/current viewport capture with MCP PNG output and camera restoration; one native Undo action.
 - Shared HomeCAD/persistent/entity identity and instance paths, scene resolver, serializer, Ruby and Python coverage, and Windows M1 smoke script.

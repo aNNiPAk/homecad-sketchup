@@ -10,6 +10,7 @@
 ## Scope and API choices
 
 - The pinned MCP Python SDK 1.30.0 supports standard `ToolAnnotations` via `@mcp.tool(annotations=...)` and exposes them through `FastMCP.list_tools()`. Read-only inspection/capture tools set `readOnlyHint=true`, `openWorldHint=false`; native `undo` sets `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=false`. These are advisory protocol hints, not enforcement.
+- The protocol-v1 `hello` reply now includes versioned capability names. Python checks each operation's capability rather than inferring feature support from the extension version. Missing capabilities mean unsupported operation; the baseline `homecad_status` call does not require one.
 
 - `list_objects` inspects one collection at a time: root, current edit context, or the immediate children of a target. Face/edge topology is excluded unless `entity_type` requests it. Results have `limit` (1..100) and numeric `offset`; no recursive scene dump.
 - `find_objects` accepts identity, SketchUp type, HomeCAD type, name, tag, parent identifier and HomeCAD metadata filters. Exact `persistent_id` or `entity_id` uses SketchUp's native lookup first; nested or metadata searches traverse with a finite visit/depth budget. Exhausting the budget raises `constraint_violation`, never a false `unique` or `none`.

@@ -39,7 +39,9 @@ async def test_handshake_and_two_tools():
         assert hello["method"] == "hello"
         assert hello["params"]["protocol_version"] == 1
         await send_response(writer, response(1, result={"protocol_version": 1,
-                         "ruby_extension_version": "0.1.0"}))
+                         "ruby_extension_version": "0.1.0",
+                         "capabilities": ["model.info.v1", "scene.inspect.v1",
+                                          "scene.measure.v1", "view.capture.v1", "scene.undo.v1"]}))
         call = await read_request(reader)
         methods.append(call["method"])
         await send_response(writer, response(2, result={"name": "test"}))
@@ -56,12 +58,39 @@ async def test_handshake_and_two_tools():
         await server.wait_closed()
 
 
-def test_capture_rejects_old_camera_bridge_without_blocking_m0():
-    hello = {"ruby_extension_version": "0.2.0"}
-    BridgeClient._check_method_version("homecad_status", hello)
-    with pytest.raises(BridgeError, match="requires HomeCAD RBZ 0.2.1") as caught:
-        BridgeClient._check_method_version("capture_view", hello)
-    assert caught.value.category == "incompatible_version"
+def test_capability_handshake_accepts_current_bridge_and_unknown_capabilities():
+    hello = {"ruby_extension_version": "0.3.0", "capabilities": [
+        "model.info.v1", "scene.inspect.v1", "scene.measure.v1", "view.capture.v1",
+        "scene.undo.v1", "future.unknown.v1"]}
+    BridgeClient._check_hello({"protocol_version": 1, **hello})
+    for method in ("get_model_info", "list_objects", "find_objects", "get_object",
+                   "get_selection", "measure", "capture_view", "undo"):
+        BridgeClient._check_method_capability(method, hello)
+
+
+def test_old_bridge_without_capabilities_still_reports_status():
+    hello = {"protocol_version": 1, "ruby_extension_version": "0.2.1"}
+    BridgeClient._check_hello(hello)
+    BridgeClient._check_method_capability("homecad_status", hello)
+    with pytest.raises(BridgeError, match="scene.inspect.v1") as caught:
+        BridgeClient._check_method_capability("list_objects", hello)
+    assert caught.value.category == "unsupported_operation"
+    with pytest.raises(BridgeError, match="view.capture.v1") as caught:
+        BridgeClient._check_method_capability("capture_view", hello)
+    assert caught.value.category == "unsupported_operation"
+
+
+def test_capability_list_may_be_empty_or_missing_but_must_be_well_formed():
+    with pytest.raises(BridgeError) as missing:
+        BridgeClient._check_method_capability("measure", {"ruby_extension_version": "0.2.1"})
+    assert missing.value.category == "unsupported_operation"
+    with pytest.raises(BridgeError, match="malformed capabilities") as malformed:
+        BridgeClient._check_method_capability("capture_view", {
+            "ruby_extension_version": "0.3.0", "capabilities": "view.capture.v1"})
+    assert malformed.value.category == "invalid_response"
+    with pytest.raises(BridgeError, match="malformed capabilities"):
+        BridgeClient._check_method_capability("capture_view", {
+            "ruby_extension_version": "0.3.0", "capabilities": ["view.capture.v1", 7]})
 
 
 @pytest.mark.asyncio

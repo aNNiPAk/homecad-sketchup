@@ -17,7 +17,7 @@ uv sync --project mcp
 uv run --project mcp python scripts/build_rbz.py
 ```
 
-Install `dist\homecad.rbz` with **SketchUp → Extensions → Extension Manager → Install Extension**, then restart SketchUp. The Ruby Console should show `[HomeCAD] INFO listening on 127.0.0.1:37941`. Confirm that `homecad_status.ruby_extension_version` says `0.2.1`; an earlier version still has the camera restoration bug.
+Install `dist\homecad.rbz` with **SketchUp → Extensions → Extension Manager → Install Extension**, then restart SketchUp. The Ruby Console should show `[HomeCAD] INFO listening on 127.0.0.1:37941`. Confirm that `homecad_status.ruby_extension_version` says `0.3.0` and that it advertises `view.capture.v1` before running the capture smoke test.
 
 The M0 connection check remains available:
 
@@ -44,7 +44,7 @@ For an MCP host, configure a stdio server with command `uv` and arguments `run -
 - `capture_view` accepts `current`, `top`, `front`, `back`, `left`, `right`, `iso`, plus `zoom_extents`, `target`, `max_size` (64–1600) and `restore_camera` (default true). Targeted capture frames the resolved placement's world bounds. It includes `camera_before`, `camera_after`, and `camera_restored` in metadata. Target and `zoom_extents` cannot be combined.
 - `undo` queues exactly one native SketchUp Undo action and returns `status: queued`. SketchUp's action API is asynchronous; the response does not claim completion.
 
-The full request and response shape is in [the M1 contract](tests/contracts/m1.md). Design decisions and reviewed reference commits are in [M1 decisions](docs/M1_DECISIONS.md).
+The full request and response shape is in [the M1 contract](tests/contracts/m1.md). Design decisions and reviewed reference commits are in [M1 decisions](docs/M1_DECISIONS.md); the versioned capability handshake is recorded in [ADR 0001](docs/decisions/0001-capability-handshake.md).
 
 MCP tools advertise standard behavior annotations: inspection and capture are read-only; `undo` is marked as state-changing and potentially destructive. These hints help clients present tools accurately but do not enforce safety.
 
@@ -56,7 +56,7 @@ MCP tools advertise standard behavior annotations: inspection and capture are re
 | `HOMECAD_TIMEOUT` | `30` | Python request timeout in seconds, >0 and <=120. |
 | `HOMECAD_LOG_LEVEL` | `INFO` | Python logs to stderr; Ruby logs to its Console. |
 
-The bridge binds only `127.0.0.1`, uses a 16 MiB frame cap for screenshots, and keeps the M0 four-byte framing and protocol version 1 handshake.
+The bridge binds only `127.0.0.1`, uses a 16 MiB frame cap for screenshots, and keeps the M0 four-byte framing and protocol version 1 handshake. The additive `hello` response advertises versioned capabilities; Python checks the capability required by each operation. An older bridge without capabilities can still answer `homecad_status`, while unsupported operations return `unsupported_operation`.
 
 ## Tests
 

@@ -10,19 +10,17 @@ from pathlib import Path
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-from homecad_mcp import VERSION
-
-
 class SmokeError(RuntimeError):
     """Expected failure with a short, actionable CLI message."""
 
 
-def check_bridge_version(status: dict) -> None:
-    installed = status.get("ruby_extension_version")
-    if installed != VERSION:
+def check_capture_capability(status: dict) -> None:
+    capabilities = status.get("capabilities", [])
+    if not isinstance(capabilities, list) or "view.capture.v1" not in capabilities:
+        installed = status.get("ruby_extension_version")
         raise SmokeError(
-            f"SketchUp has HomeCAD RBZ {installed!r}; this smoke test needs {VERSION}. "
-            "Install dist\\homecad.rbz and restart SketchUp before capture."
+            f"SketchUp HomeCAD RBZ {installed!r} does not advertise required capability "
+            "'view.capture.v1'. Install dist\\homecad.rbz and restart SketchUp before capture."
         )
 
 
@@ -69,7 +67,7 @@ async def run(name: str | None, output: Path) -> None:
             status, _ = await call("homecad_status")
             if status["connection_status"] != "connected":
                 raise SmokeError("Open SketchUp with HomeCAD enabled before running M1 smoke")
-            check_bridge_version(status)
+            check_capture_capability(status)
             model_before, _ = await call("get_model_info")
             await call("list_objects", {"limit": 10})
             selection, _ = await call("get_selection", {"limit": 10})

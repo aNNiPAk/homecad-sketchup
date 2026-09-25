@@ -85,11 +85,14 @@ class M0Test < Minitest::Test
   end
 
   def test_status_and_model_info
-    assert_equal '0.1.0', hello.dig('result', 'ruby_extension_version')
+    response = hello
+    assert_equal '0.1.0', response.dig('result', 'ruby_extension_version')
+    assert_equal HomeCAD::Runtime::Dispatcher::CAPABILITIES, response.dig('result', 'capabilities')
     send_request(2, 'homecad_status')
     status = next_response['result']
     assert_equal 'connected', status['connection_status']
     assert_equal '(Untitled)', status['model_name']
+    assert_equal HomeCAD::Runtime::Dispatcher::CAPABILITIES, status['capabilities']
     @client.close
     @client = TCPSocket.new('127.0.0.1', @server.instance_variable_get(:@port))
     assert_equal 1, hello.dig('result', 'protocol_version')

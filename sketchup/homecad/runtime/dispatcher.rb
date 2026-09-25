@@ -1,6 +1,14 @@
 module HomeCAD
   module Runtime
     module Dispatcher
+      CAPABILITIES = %w[
+        model.info.v1
+        scene.inspect.v1
+        scene.measure.v1
+        view.capture.v1
+        scene.undo.v1
+      ].freeze
+
       def self.dispatch(request, handshake_done:)
         validate_request!(request)
         method = request['method']
@@ -56,12 +64,14 @@ module HomeCAD
         end
 
         { 'protocol_version' => HomeCAD::PROTOCOL_VERSION,
-          'ruby_extension_version' => HomeCAD::VERSION }
+          'ruby_extension_version' => HomeCAD::VERSION,
+          'capabilities' => CAPABILITIES }
       end
 
       def self.status
         { 'ruby_extension_version' => HomeCAD::VERSION,
           'protocol_version' => HomeCAD::PROTOCOL_VERSION,
+          'capabilities' => CAPABILITIES,
           'sketchup_version' => Sketchup.version,
           'model_name' => model_name(active_model!),
           'connection_status' => 'connected' }

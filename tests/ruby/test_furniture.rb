@@ -52,6 +52,57 @@ class FurnitureTest < Minitest::Test
     assert_equal before + 1, @model.events.count { |event| event.first == :start }
   end
 
+  def test_zero_back_omits_back_part_and_shelves_start_at_zero_depth_offset
+    result = HomeCAD::Furniture.create_cabinet(@model, 'width_mm' => 600, 'depth_mm' => 560,
+      'height_mm' => 720, 'panel_thickness_mm' => 18, 'back_thickness_mm' => 0,
+      'shelf_z_mm' => [350], 'detail_level' => 'construction')
+    cabinet_id = result.dig('created', 0, 'identity', 'homecad_id')
+    cabinet = @model.entities.find { |entity| HomeCAD::Metadata.read(entity)['homecad_id'] == cabinet_id }
+    schedule = HomeCAD::Furniture.list_parts(@model, 'target' => { 'homecad_id' => cabinet_id })
+    assert_equal %w[left_side right_side bottom top shelf:0], schedule['parts'].map { |part| part['part_key'] }
+    shelf = schedule['parts'].find { |part| part['part_key'] == 'shelf:0' }
+    assert_equal [18.0, 0.0, 350.0], shelf['origin_mm']
+    assert_equal 560.0, shelf['height_mm']
+    assert_equal schedule['count'], cabinet.entities.length
+    refute cabinet.entities.any? { |part| part.name == 'back' }
+    assert_raises(HomeCAD::Runtime::BridgeError) do
+      HomeCAD::Furniture.create_cabinet(@model, 'width_mm' => 600, 'depth_mm' => 560,
+        'height_mm' => 720, 'back_thickness_mm' => -0.1)
+    end
+  end
+
+  def test_concept_construction_lod_transitions_preserve_root_and_logical_schedule
+    created = HomeCAD::Furniture.create_cabinet(@model, 'width_mm' => 600, 'depth_mm' => 560,
+      'height_mm' => 720, 'panel_thickness_mm' => 18, 'back_thickness_mm' => 4,
+      'shelf_z_mm' => [350], 'fronts' => [{ 'key' => 'door', 'kind' => 'door',
+        'x_mm' => 0, 'z_mm' => 0, 'width_mm' => 600, 'height_mm' => 720 }],
+      'detail_level' => 'construction')
+    cabinet_id = created.dig('created', 0, 'identity', 'homecad_id')
+    root = @model.entities.find { |entity| HomeCAD::Metadata.read(entity)['homecad_id'] == cabinet_id }
+    frame = HomeCAD::Furniture.get_frame(@model, 'target' => { 'homecad_id' => cabinet_id })
+    schedule = HomeCAD::Furniture.list_parts(@model, 'target' => { 'homecad_id' => cabinet_id })['parts']
+    keys = schedule.map { |part| part['part_key'] }
+    construction_children = root.entities.map(&:object_id)
+    assert_equal 1, HomeCAD::Metadata.read(root)['revision']
+    assert_equal keys.length, root.entities.length
+
+    concept = HomeCAD::Furniture.update_object(@model, 'target' => { 'homecad_id' => cabinet_id },
+      'changes' => { 'detail_level' => 'concept' })
+    assert_same root, @model.entities.find { |entity| HomeCAD::Metadata.read(entity)['homecad_id'] == cabinet_id }
+    assert_equal 2, concept['revision']
+    assert_equal frame, HomeCAD::Furniture.get_frame(@model, 'target' => { 'homecad_id' => cabinet_id })
+    assert_equal keys, HomeCAD::Furniture.list_parts(@model, 'target' => { 'homecad_id' => cabinet_id })['parts'].map { |part| part['part_key'] }
+    assert_equal 'concept', HomeCAD::FurnitureData.read_params(root)['detail_level']
+    assert_equal 7, root.entities.length
+    refute_equal construction_children, root.entities.map(&:object_id)
+
+    construction = HomeCAD::Furniture.update_object(@model, 'target' => { 'homecad_id' => cabinet_id },
+      'changes' => { 'detail_level' => 'construction' })
+    assert_equal 3, construction['revision']
+    assert_equal keys, root.entities.map { |part| HomeCAD::Metadata.read(part)['part_key'] }
+    assert_equal frame, HomeCAD::Furniture.get_frame(@model, 'target' => { 'homecad_id' => cabinet_id })
+  end
+
   def test_part_extrusion_follows_positive_world_z_for_reversed_face_normal
     face = Object.new
     face.define_singleton_method(:normal) { Geom::Vector3d.new(0, 0, -1) }

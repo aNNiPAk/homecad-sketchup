@@ -55,7 +55,8 @@ module HomeCAD
         values[key] = Geometry.positive_length(values[key], key)
       end
       values['panel_thickness_mm'] = Geometry.positive_length(values.fetch('panel_thickness_mm', 18), 'panel_thickness_mm')
-      values['back_thickness_mm'] = Geometry.positive_length(values.fetch('back_thickness_mm', 4), 'back_thickness_mm')
+      values['back_thickness_mm'] = Geometry.finite_number(values.fetch('back_thickness_mm', 4), 'back_thickness_mm')
+      constraint!('back_thickness_mm must be nonnegative') if values['back_thickness_mm'].negative?
       if values['panel_thickness_mm'] * 2 >= [values['width_mm'], values['height_mm']].min
         constraint!('panel_thickness_mm must be less than half the cabinet width and height')
       end
@@ -197,11 +198,13 @@ module HomeCAD
           'origin_mm' => [panel, 0.0, 0.0] },
         { 'part_key' => 'top', 'part_kind' => 'carcass_panel', 'quantity' => 1,
           'width_mm' => width - 2 * panel, 'height_mm' => depth, 'thickness_mm' => panel,
-          'origin_mm' => [panel, 0.0, height - panel] },
-        { 'part_key' => 'back', 'part_kind' => 'back_panel', 'quantity' => 1,
+          'origin_mm' => [panel, 0.0, height - panel] }
+      ]
+      if back.positive?
+        parts << { 'part_key' => 'back', 'part_kind' => 'back_panel', 'quantity' => 1,
           'width_mm' => width - 2 * panel, 'height_mm' => height - 2 * panel, 'thickness_mm' => back,
           'origin_mm' => [panel, 0.0, panel] }
-      ]
+      end
       params['shelf_z_mm'].each_with_index do |z, index|
         parts << { 'part_key' => "shelf:#{index}", 'part_kind' => 'shelf', 'quantity' => 1,
           'width_mm' => width - 2 * panel, 'height_mm' => depth - back, 'thickness_mm' => panel,

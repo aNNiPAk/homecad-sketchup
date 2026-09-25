@@ -15,6 +15,7 @@ def test_rbz_contains_loader_and_matching_support_folder():
         required_core_files = {
             "scene", "targeting", "serializer", "inspection", "measurement", "capture",
             "metadata", "mutation", "geometry", "primitives", "mutations", "architecture",
+            "wall_attachment", "furniture_data", "furniture",
         }
         assert {f"homecad/core/{name}.rb" for name in required_core_files} <= names
         assert all(name == "homecad.rb" or name.startswith("homecad/") for name in names)

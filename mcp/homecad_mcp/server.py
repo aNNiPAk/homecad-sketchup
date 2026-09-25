@@ -341,6 +341,46 @@ async def detect_rooms() -> dict:
     return await _scene_call("detect_rooms", {})
 
 
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def get_furniture_frame(target: dict) -> dict:
+    """Read the Cabinet origin and right-handed local frame in world coordinates."""
+    return await _scene_call("get_furniture_frame", {"target": target})
+
+
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def list_furniture_parts(target: dict) -> dict:
+    """Return a parameter-derived millimeter part schedule for a Cabinet."""
+    return await _scene_call("list_furniture_parts", {"target": target})
+
+
+@mcp.tool(annotations=CREATE_TOOL)
+async def create_cabinet(width_mm: float, depth_mm: float, height_mm: float,
+                         panel_thickness_mm: float = 18, back_thickness_mm: float = 4,
+                         shelf_z_mm: list[float] | None = None, fronts: list[dict] | None = None,
+                         detail_level: str = "construction", placement: dict | None = None,
+                         name: str = "Cabinet") -> dict:
+    """Create a parametric Cabinet; all dimensions and coordinates are millimeters."""
+    params = {"width_mm": width_mm, "depth_mm": depth_mm, "height_mm": height_mm,
+              "panel_thickness_mm": panel_thickness_mm, "back_thickness_mm": back_thickness_mm,
+              "shelf_z_mm": shelf_z_mm or [], "fronts": fronts or [],
+              "detail_level": detail_level, "name": name}
+    if placement is not None:
+        params["placement"] = placement
+    return await _scene_call("create_cabinet", params)
+
+
+@mcp.tool(annotations=MUTATE_TOOL)
+async def update_furniture_object(target: dict, changes: dict) -> dict:
+    """Update Cabinet parameters and regenerate its generated parts."""
+    return await _scene_call("update_furniture_object", {"target": target, "changes": changes})
+
+
+@mcp.tool(annotations=MUTATE_TOOL)
+async def delete_furniture_object(target: dict) -> dict:
+    """Delete a Cabinet and return its pre-delete tombstone."""
+    return await _scene_call("delete_furniture_object", {"target": target})
+
+
 def main() -> None:
     level = os.environ.get("HOMECAD_LOG_LEVEL", "INFO").upper()
     logging.basicConfig(level=getattr(logging, level, logging.INFO),

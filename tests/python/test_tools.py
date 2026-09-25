@@ -1,9 +1,12 @@
 import pytest
 
 from homecad_mcp.errors import BridgeError
+from homecad_mcp.connection import BridgeClient
 from homecad_mcp.server import (boolean_operation, capture_view, create_box, find_objects,
                                 create_wall, detect_rooms, get_model_info, homecad_status,
-                                mcp, push_pull, update_architecture_object)
+                                mcp, push_pull, update_architecture_object, create_cabinet,
+                                get_furniture_frame, list_furniture_parts,
+                                update_furniture_object, delete_furniture_object)
 
 
 @pytest.mark.asyncio
@@ -17,13 +20,17 @@ async def test_mcp_tools_expose_mutation_schemas_and_annotations():
                      "follow_me", "transform_object", "boolean_operation", "get_wall_frame",
                      "create_wall", "create_opening", "create_door", "create_window",
                      "create_niche", "create_column", "update_architecture_object",
-                     "delete_architecture_object", "create_room", "detect_rooms"}
+                     "delete_architecture_object", "create_room", "detect_rooms",
+                     "get_furniture_frame", "list_furniture_parts", "create_cabinet",
+                     "update_furniture_object", "delete_furniture_object"}
     read_only = {"homecad_status", "get_model_info", "list_objects", "find_objects",
                  "get_object", "get_selection", "measure", "capture_view"}
     for name in read_only:
         assert tools[name].annotations.readOnlyHint is True
         assert tools[name].annotations.openWorldHint is False
     for name in {"get_wall_frame", "detect_rooms"}:
+        assert tools[name].annotations.readOnlyHint is True
+    for name in {"get_furniture_frame", "list_furniture_parts"}:
         assert tools[name].annotations.readOnlyHint is True
     create_tools = {"create_group", "create_face", "create_edge", "create_box", "create_circle",
                     "create_arc", "create_polygon", "boolean_operation"}
@@ -39,7 +46,16 @@ async def test_mcp_tools_expose_mutation_schemas_and_annotations():
         assert tools[name].annotations.destructiveHint is False
         assert tools[name].annotations.idempotentHint is False
         assert tools[name].annotations.openWorldHint is False
+    for name in {"create_cabinet"}:
+        assert tools[name].annotations.readOnlyHint is False
+        assert tools[name].annotations.destructiveHint is False
+        assert tools[name].annotations.idempotentHint is False
     for name in {"update_architecture_object", "delete_architecture_object"}:
+        assert tools[name].annotations.readOnlyHint is False
+        assert tools[name].annotations.destructiveHint is True
+        assert tools[name].annotations.idempotentHint is False
+        assert tools[name].annotations.openWorldHint is False
+    for name in {"update_furniture_object", "delete_furniture_object"}:
         assert tools[name].annotations.readOnlyHint is False
         assert tools[name].annotations.destructiveHint is True
         assert tools[name].annotations.idempotentHint is False
@@ -57,6 +73,7 @@ async def test_mcp_tools_expose_mutation_schemas_and_annotations():
     assert "target" in tools["transform_object"].inputSchema["properties"]
     assert "start_mm" in tools["create_wall"].inputSchema["properties"]
     assert "wall_ids" in tools["create_room"].inputSchema["properties"]
+    assert "width_mm" in tools["create_cabinet"].inputSchema["properties"]
 
 
 @pytest.mark.asyncio
@@ -163,3 +180,41 @@ async def test_architecture_tools_forward_domain_parameters(monkeypatch):
                                          "changes": {"height_mm": 2800}}),
         ("detect_rooms", {}),
     ]
+
+
+@pytest.mark.asyncio
+async def test_furniture_tools_forward_parameters_and_preserve_envelope(monkeypatch):
+    calls = []
+    envelope = {"status": "success", "operation": "create_cabinet", "created": [],
+                "updated": [], "deleted": [], "warnings": [], "revision": 1}
+
+    async def fake(method, params):
+        calls.append((method, params))
+        return envelope
+
+    monkeypatch.setattr("homecad_mcp.server._scene_call", fake)
+    assert await create_cabinet(600, 560, 720, shelf_z_mm=[300]) is envelope
+    await get_furniture_frame({"homecad_id": "cabinet"})
+    await list_furniture_parts({"homecad_id": "cabinet"})
+    await update_furniture_object({"homecad_id": "cabinet"}, {"height_mm": 800})
+    await delete_furniture_object({"homecad_id": "cabinet"})
+    assert calls[0][0] == "create_cabinet"
+    assert calls[0][1]["shelf_z_mm"] == [300]
+    assert calls[1:] == [
+        ("get_furniture_frame", {"target": {"homecad_id": "cabinet"}}),
+        ("list_furniture_parts", {"target": {"homecad_id": "cabinet"}}),
+        ("update_furniture_object", {"target": {"homecad_id": "cabinet"}, "changes": {"height_mm": 800}}),
+        ("delete_furniture_object", {"target": {"homecad_id": "cabinet"}}),
+    ]
+
+
+def test_furniture_methods_require_advertised_capability():
+    with pytest.raises(BridgeError) as missing:
+        BridgeClient._check_method_capability("create_cabinet", {
+            "protocol_version": 1, "ruby_extension_version": "0.5.0", "capabilities": ["architecture.core.v1"]
+        })
+    assert missing.value.category == "unsupported_operation"
+    BridgeClient._check_method_capability("create_cabinet", {
+        "protocol_version": 1, "ruby_extension_version": "0.6.0",
+        "capabilities": ["furniture.core.v1", "unknown.future.capability.v9"],
+    })

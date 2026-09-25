@@ -185,9 +185,58 @@ async def test_m3_wall_window_update_delete_cross_language():
         await process.wait()
 
 
+@pytest.mark.asyncio
+async def test_m4_cabinet_create_frame_update_cross_language():
+    ruby = shutil.which("ruby")
+    if ruby is None:
+        pytest.skip("Ruby executable unavailable")
+    process = await asyncio.create_subprocess_exec(
+        ruby, "tests/ruby/bridge_fixture.rb", cwd=ROOT,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        port = int(await asyncio.wait_for(process.stdout.readline(), 5))
+        client = BridgeClient(Config(port=port))
+        status = await client.call("homecad_status")
+        assert "furniture.core.v1" in status["capabilities"]
+        result = await client.call("create_cabinet", {
+            "width_mm": 600, "depth_mm": 560, "height_mm": 720,
+            "shelf_z_mm": [300], "detail_level": "construction",
+        })
+        cabinet_id = result["created"][0]["identity"]["homecad_id"]
+        assert result["created"][0]["metadata"]["type"] == "furniture.cabinet"
+        assert result["created"][0]["metadata"]["revision"] == 1
+        found = await client.call("find_objects", {"homecad_id": cabinet_id})
+        assert found["resolution"] == "unique"
+        frame = await client.call("get_furniture_frame", {"target": {"homecad_id": cabinet_id}})
+        assert frame["width_mm"] == 600
+        assert frame["x_axis"] == pytest.approx([1, 0, 0])
+        schedule = await client.call("list_furniture_parts", {"target": {"homecad_id": cabinet_id}})
+        assert schedule["count"] == 6
+        updated = await client.call("update_furniture_object", {
+            "target": {"homecad_id": cabinet_id}, "changes": {"height_mm": 800},
+        })
+        assert updated["revision"] == 2
+        cabinet = await client.call("get_object", {"target": {"homecad_id": cabinet_id}})
+        assert cabinet["parameters"]["height_mm"] == 800
+        assert cabinet["metadata"]["revision"] == 2
+    finally:
+        process.terminate()
+        await process.wait()
+
+
 def test_m3_smoke_requires_disposable_model_confirmation():
     result = __import__("subprocess").run(
         [sys.executable, "scripts/smoke_m3.py"], cwd=ROOT,
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 2
+    assert "--confirm-disposable" in result.stderr
+
+
+def test_m4_smoke_requires_disposable_model_confirmation():
+    result = __import__("subprocess").run(
+        [sys.executable, "scripts/smoke_m4.py"], cwd=ROOT,
         capture_output=True, text=True, check=False,
     )
     assert result.returncode == 2
@@ -214,7 +263,8 @@ async def test_mcp_stdio_starts_and_lists_supported_tools():
                 "boolean_operation", "get_wall_frame", "create_wall", "create_opening",
                 "create_door", "create_window", "create_niche", "create_column",
                 "update_architecture_object", "delete_architecture_object", "create_room",
-                "detect_rooms"}
+        "detect_rooms", "get_furniture_frame", "list_furniture_parts", "create_cabinet",
+        "update_furniture_object", "delete_furniture_object"}
             status = await session.call_tool("homecad_status", {})
             assert not status.isError
             assert json.loads(status.content[0].text)["connection_status"] == "disconnected"

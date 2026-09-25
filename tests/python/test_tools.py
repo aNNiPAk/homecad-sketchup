@@ -6,9 +6,18 @@ from homecad_mcp.server import capture_view, find_objects, get_model_info, homec
 
 @pytest.mark.asyncio
 async def test_mcp_has_m1_scene_tools():
-    names = {tool.name for tool in await mcp.list_tools()}
+    tools = {tool.name: tool for tool in await mcp.list_tools()}
+    names = set(tools)
     assert names == {"homecad_status", "get_model_info", "list_objects", "find_objects",
                      "get_object", "get_selection", "measure", "capture_view", "undo"}
+    read_only = names - {"undo"}
+    for name in read_only:
+        assert tools[name].annotations.readOnlyHint is True
+        assert tools[name].annotations.openWorldHint is False
+    assert tools["undo"].annotations.readOnlyHint is False
+    assert tools["undo"].annotations.destructiveHint is True
+    assert tools["undo"].annotations.idempotentHint is False
+    assert tools["undo"].annotations.openWorldHint is False
 
 
 @pytest.mark.asyncio

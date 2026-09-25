@@ -9,6 +9,8 @@
 
 ## Scope and API choices
 
+- The pinned MCP Python SDK 1.30.0 supports standard `ToolAnnotations` via `@mcp.tool(annotations=...)` and exposes them through `FastMCP.list_tools()`. Read-only inspection/capture tools set `readOnlyHint=true`, `openWorldHint=false`; native `undo` sets `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=false`. These are advisory protocol hints, not enforcement.
+
 - `list_objects` inspects one collection at a time: root, current edit context, or the immediate children of a target. Face/edge topology is excluded unless `entity_type` requests it. Results have `limit` (1..100) and numeric `offset`; no recursive scene dump.
 - `find_objects` accepts identity, SketchUp type, HomeCAD type, name, tag, parent identifier and HomeCAD metadata filters. Exact `persistent_id` or `entity_id` uses SketchUp's native lookup first; nested or metadata searches traverse with a finite visit/depth budget. Exhausting the budget raises `constraint_violation`, never a false `unique` or `none`.
 - Native lookup returns a root object directly; a supplied `instance_path` walks only the named containers. Broad searches may visit up to 100,000 entities and 32 levels, then require narrower filters. No persistent custom index is maintained.

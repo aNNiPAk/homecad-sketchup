@@ -9,6 +9,7 @@ import os
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP, Image
+from mcp.types import ToolAnnotations
 
 from . import PROTOCOL_VERSION, VERSION
 from .connection import BridgeClient
@@ -16,9 +17,12 @@ from .errors import BridgeError
 
 logger = logging.getLogger(__name__)
 mcp = FastMCP("HomeCAD for SketchUp")
+READ_ONLY_TOOL = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
+UNDO_TOOL = ToolAnnotations(readOnlyHint=False, destructiveHint=True,
+                            idempotentHint=False, openWorldHint=False)
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY_TOOL)
 async def homecad_status() -> dict:
     """Report MCP, bridge, SketchUp and active model status."""
     try:
@@ -34,7 +38,7 @@ async def homecad_status() -> dict:
         }
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY_TOOL)
 async def get_model_info() -> dict:
     """Read the active SketchUp model's identity and collection counts."""
     try:
@@ -52,7 +56,7 @@ async def _scene_call(method: str, params: dict[str, Any]) -> dict:
         raise RuntimeError(f"{exc.category}: {exc.message}") from exc
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY_TOOL)
 async def list_objects(context: str = "root", parent: dict | None = None,
                        entity_type: str | None = None, include_hidden: bool = False,
                        include_generated: bool = False, limit: int = 50, offset: int = 0) -> dict:
@@ -62,7 +66,7 @@ async def list_objects(context: str = "root", parent: dict | None = None,
         "include_generated": include_generated, "limit": limit, "offset": offset})
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY_TOOL)
 async def find_objects(homecad_id: str | None = None, persistent_id: int | None = None,
                        entity_id: int | None = None, entity_type: str | None = None,
                        homecad_type: str | None = None, name: str | None = None,
@@ -75,19 +79,19 @@ async def find_objects(homecad_id: str | None = None, persistent_id: int | None 
     return await _scene_call("find_objects", {**filters, "limit": limit, "offset": offset})
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY_TOOL)
 async def get_object(target: dict) -> dict:
     """Inspect one uniquely identified SketchUp object with dimensions and metadata."""
     return await _scene_call("get_object", {"target": target})
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY_TOOL)
 async def get_selection(limit: int = 50, offset: int = 0) -> dict:
     """Read selected objects using the same identity and serializer as get_object."""
     return await _scene_call("get_selection", {"limit": limit, "offset": offset})
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY_TOOL)
 async def measure(kind: str, target: dict, other_target: dict | None = None) -> dict:
     """Measure bounds, dimensions, distances, face area or edge length in metric units."""
     params = {"kind": kind, "target": target}
@@ -96,7 +100,7 @@ async def measure(kind: str, target: dict, other_target: dict | None = None) -> 
     return await _scene_call("measure", params)
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY_TOOL)
 async def capture_view(view: str = "current", zoom_extents: bool = False,
                        target: dict | None = None, max_size: int = 1024,
                        restore_camera: bool = True) -> list:
@@ -116,7 +120,7 @@ async def capture_view(view: str = "current", zoom_extents: bool = False,
     return [json.dumps(result), Image(data=png, format="png")]
 
 
-@mcp.tool()
+@mcp.tool(annotations=UNDO_TOOL)
 async def undo() -> dict:
     """Queue exactly one native SketchUp Undo action."""
     return await _scene_call("undo", {})

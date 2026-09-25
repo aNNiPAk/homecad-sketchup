@@ -46,6 +46,8 @@ For an MCP host, configure a stdio server with command `uv` and arguments `run -
 
 The full request and response shape is in [the M1 contract](tests/contracts/m1.md). Design decisions and reviewed reference commits are in [M1 decisions](docs/M1_DECISIONS.md).
 
+MCP tools advertise standard behavior annotations: inspection and capture are read-only; `undo` is marked as state-changing and potentially destructive. These hints help clients present tools accurately but do not enforce safety.
+
 ## Configuration
 
 | Variable | Default | Effect |

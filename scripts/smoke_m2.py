@@ -1,4 +1,4 @@
-"""Run M2 mutations against a disposable SketchUp model only."""
+"""Run M2/M2.1 mutations against a disposable SketchUp model only."""
 
 import argparse
 import asyncio
@@ -32,96 +32,251 @@ async def run(output: Path) -> None:
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
+            pending_undos = 0
+            created_ids: list[str] = []
+            output.parent.mkdir(parents=True, exist_ok=True)
 
             async def call(tool: str, arguments: dict | None = None):
+                nonlocal pending_undos
                 result = await session.call_tool(tool, arguments or {})
                 if result.isError:
                     text = next((item.text for item in result.content if item.type == "text"), "unknown error")
                     raise SmokeError(f"{tool}: {text}")
                 data = next((json.loads(item.text) for item in result.content if item.type == "text"), {})
                 print(f"{tool}: {json.dumps(data, ensure_ascii=False)}")
+                if data.get("status") == "success" and tool in {
+                    "create_box", "create_face", "push_pull", "follow_me", "transform_object", "boolean_operation"
+                }:
+                    pending_undos += 1
+                    created_ids.extend(obj["identity"]["homecad_id"] for obj in data.get("created", [])
+                                       if obj.get("identity", {}).get("homecad_id"))
                 return data, result.content
+
+            async def expected_error(tool: str, arguments: dict, category: str) -> str:
+                result = await session.call_tool(tool, arguments)
+                if not result.isError:
+                    raise SmokeError(f"{tool} unexpectedly succeeded; expected {category}")
+                message = " ".join(item.text for item in result.content if item.type == "text")
+                if category not in message:
+                    raise SmokeError(f"{tool} returned {message!r}; expected category {category}")
+                print(f"{tool} expected error: {message}")
+                return message
+
+            async def undo_one() -> None:
+                nonlocal pending_undos
+                result, _ = await call("undo")
+                if result.get("actions") != 1:
+                    raise SmokeError("Undo did not queue exactly one SketchUp action")
+                pending_undos -= 1
+                await asyncio.sleep(0.35)
+
+            async def get(target: dict) -> dict:
+                result, _ = await call("get_object", {"target": target})
+                return result
+
+            async def find(homecad_id: str) -> dict:
+                result, _ = await call("find_objects", {"homecad_id": homecad_id, "limit": 5})
+                return result
+
+            async def screenshot(path: Path, target: dict | None = None) -> None:
+                args = {"view": "iso", "max_size": 1024, "restore_camera": True}
+                if target is not None:
+                    args["target"] = target
+                result, content = await call("capture_view", args)
+                image = next((item for item in content if item.type == "image" and item.mimeType == "image/png"), None)
+                encoded = result.get("image_base64")
+                data = base64.b64decode(image.data, validate=True) if image else (
+                    base64.b64decode(encoded, validate=True) if encoded else b"")
+                if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+                    raise SmokeError("capture_view did not return a PNG image")
+                path.write_bytes(data)
+                print(f"saved screenshot: {path.resolve()}")
+
+            async def create_face(points: list[list[float]], name: str) -> str:
+                result, _ = await call("create_face", {"points_mm": points, "name": name})
+                if result.get("status") != "success" or len(result.get("created", [])) != 1:
+                    raise SmokeError(f"{name} face creation did not return one managed Group")
+                identifier = result["created"][0]["identity"]["homecad_id"]
+                if not identifier:
+                    raise SmokeError(f"{name} has no HomeCAD UUID")
+                return identifier
+
+            async def child_face(group_id: str) -> dict:
+                listed, _ = await call("list_objects", {
+                    "parent": {"homecad_id": group_id}, "entity_type": "Face",
+                    "include_generated": True, "limit": 10,
+                })
+                faces = listed.get("objects", [])
+                if len(faces) != 1:
+                    raise SmokeError(f"Expected one Face in {group_id}; got {len(faces)}")
+                identity = faces[0].get("identity", {})
+                selector = {key: identity[key] for key in ("persistent_id", "entity_id")
+                            if identity.get(key) is not None}
+                if not selector:
+                    raise SmokeError("Face has no resolvable SketchUp identity")
+                return selector
 
             status, _ = await call("homecad_status")
             if status.get("connection_status") != "connected":
                 raise SmokeError("Open SketchUp with HomeCAD enabled before running this smoke test")
-            capabilities = status.get("capabilities", [])
-            if "geometry.primitive.v1" not in capabilities:
+            if "geometry.primitive.v1" not in status.get("capabilities", []):
                 raise SmokeError("Installed RBZ does not advertise geometry.primitive.v1; rebuild, reinstall, and restart SketchUp")
+            initial, _ = await call("get_model_info")
+            print(f"Initial model modified state: {initial['modified']}")
 
-            model_before, _ = await call("get_model_info")
-            print(f"Initial model modified state: {model_before['modified']}")
-            created, _ = await call("create_box", {
-                "width_mm": 600, "depth_mm": 560, "height_mm": 720,
-                "origin_mm": [1000, 1000, 0], "name": "HomeCAD M2 Smoke Box",
-            })
-            if created.get("status") != "success" or len(created.get("created", [])) != 1:
-                raise SmokeError("create_box did not return exactly one created object")
-            homecad_id = created["created"][0]["identity"]["homecad_id"]
-            if not homecad_id:
-                raise SmokeError("created box has no HomeCAD UUID")
-            target = {"homecad_id": homecad_id}
+            try:
+                # Managed box, world-space translation, screenshot and native undo.
+                box, _ = await call("create_box", {
+                    "width_mm": 600, "depth_mm": 560, "height_mm": 720,
+                    "origin_mm": [1000, 1000, 0], "name": "HomeCAD M2.1 Smoke Box",
+                })
+                box_id = box["created"][0]["identity"]["homecad_id"]
+                box_target = {"homecad_id": box_id}
+                if (await find(box_id)).get("resolution") != "unique":
+                    raise SmokeError("Created box did not resolve uniquely")
+                before = await get(box_target)
+                dims = before.get("bbox_dimensions_mm") or {}
+                for axis, expected in {"width": 600, "depth": 560, "height": 720}.items():
+                    if abs(dims.get(axis, float("inf")) - expected) > 0.5:
+                        raise SmokeError(f"Unexpected box {axis}: {dims.get(axis)} mm")
+                original_min = before["bbox_mm"]["min"]
+                await call("transform_object", {"target": box_target,
+                    "transform": {"type": "translate", "vector_mm": [125, -40, 25]}})
+                moved = await get(box_target)
+                if any(abs((moved["bbox_mm"]["min"][i] - original_min[i]) - delta) > 0.5
+                       for i, delta in enumerate([125, -40, 25])):
+                    raise SmokeError("Translated bounds do not match requested millimeters")
+                await screenshot(output.with_name(output.stem + "-box.png"), box_target)
+                await undo_one()
+                if (await get(box_target))["bbox_mm"]["min"] != original_min:
+                    raise SmokeError("Undo did not restore box position")
+                await undo_one()
+                if (await find(box_id)).get("resolution") != "none":
+                    raise SmokeError("Undo did not remove smoke box")
 
-            found, _ = await call("find_objects", {"homecad_id": homecad_id, "limit": 5})
-            if found.get("resolution") != "unique":
-                raise SmokeError(f"Expected unique HomeCAD target; got {found.get('resolution')}")
-            before, _ = await call("get_object", {"target": target})
-            dims = before.get("bbox_dimensions_mm") or {}
-            expected = {"width": 600, "depth": 560, "height": 720}
-            for axis, value in expected.items():
-                if abs(dims.get(axis, float("inf")) - value) > 0.5:
-                    raise SmokeError(f"Unexpected {axis} bbox dimension: {dims.get(axis)} mm")
+                # Asymmetric subtraction: target [1000,1600], tool [1300,1800] => target-tool [1000,1300].
+                target_result, _ = await call("create_box", {
+                    "width_mm": 600, "depth_mm": 400, "height_mm": 300,
+                    "origin_mm": [1000, 0, 0], "name": "M2.1 Boolean Target",
+                })
+                target_id = target_result["created"][0]["identity"]["homecad_id"]
+                tool_result, _ = await call("create_box", {
+                    "width_mm": 500, "depth_mm": 400, "height_mm": 300,
+                    "origin_mm": [1300, 0, 0], "name": "M2.1 Boolean Tool",
+                })
+                tool_id = tool_result["created"][0]["identity"]["homecad_id"]
+                target_selector, tool_selector = {"homecad_id": target_id}, {"homecad_id": tool_id}
+                boolean, _ = await call("boolean_operation", {
+                    "target": target_selector, "tool": tool_selector, "operation": "difference",
+                })
+                boolean_obj = boolean["created"][0]
+                boolean_id = boolean_obj["identity"]["homecad_id"]
+                boolean_target = {"homecad_id": boolean_id}
+                bounds = boolean_obj["bbox_mm"]
+                if abs(bounds["min"][0] - 1000) > 0.5 or abs(bounds["max"][0] - 1300) > 0.5:
+                    raise SmokeError(f"Boolean result is not target - tool: x bounds {bounds}")
+                metadata = boolean_obj.get("metadata") or {}
+                if metadata.get("type") != "primitive.boolean" or metadata.get("revision") != 1:
+                    raise SmokeError(f"Unexpected boolean metadata: {metadata}")
+                if (await find(target_id)).get("resolution") != "unique" or (await find(tool_id)).get("resolution") != "unique":
+                    raise SmokeError("Boolean operation did not preserve both source objects")
+                await screenshot(output.with_name(output.stem + "-boolean.png"), boolean_target)
+                await undo_one()
+                if (await find(boolean_id)).get("resolution") != "none":
+                    raise SmokeError("Undo did not remove boolean result")
+                if (await find(target_id)).get("resolution") != "unique" or (await find(tool_id)).get("resolution") != "unique":
+                    raise SmokeError("Boolean undo did not preserve source objects")
+                await undo_one()  # tool box
+                await undo_one()  # target box
 
-            original_min = before["bbox_mm"]["min"]
-            await call("transform_object", {"target": target,
-                "transform": {"type": "translate", "vector_mm": [125, -40, 25]}})
-            moved, _ = await call("get_object", {"target": target})
-            moved_min = moved["bbox_mm"]["min"]
-            for axis, delta in enumerate([125, -40, 25]):
-                if abs((moved_min[axis] - original_min[axis]) - delta) > 0.5:
-                    raise SmokeError("Translated object bounds do not match the requested millimeter vector")
+                # Ordinary push_pull must honor public world millimeters.
+                push_group = await create_face([[0, 0, 0], [200, 0, 0], [200, 150, 0], [0, 150, 0]],
+                                               "M2.1 PushPull Profile")
+                face_selector = await child_face(push_group)
+                await call("push_pull", {"target": face_selector, "distance_mm": 80})
+                pushed = await get({"homecad_id": push_group})
+                if abs(pushed["bbox_dimensions_mm"]["height"] - 80) > 0.5:
+                    raise SmokeError(f"Ordinary push_pull did not produce 80 mm height: {pushed}")
+                await screenshot(output.with_name(output.stem + "-push-pull.png"), {"homecad_id": push_group})
+                await undo_one()
+                await undo_one()
 
-            output.parent.mkdir(parents=True, exist_ok=True)
-            capture, content = await call("capture_view", {
-                "view": "iso", "target": target, "max_size": 1024, "restore_camera": True,
-            })
-            image = next((item for item in content if item.type == "image" and item.mimeType == "image/png"), None)
-            if image is not None:
-                image_bytes = base64.b64decode(image.data, validate=True)
-            else:
-                encoded = capture.get("image_base64")
-                image_bytes = base64.b64decode(encoded, validate=True) if encoded else b""
-            if not image_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
-                raise SmokeError("capture_view did not return a PNG image")
-            output.write_bytes(image_bytes)
-            print(f"saved screenshot: {output.resolve()}")
+                # Scaled parent must be rejected without a revision or geometry change.
+                scaled_group = await create_face([[0, 0, 0], [100, 0, 0], [100, 80, 0], [0, 80, 0]],
+                                                 "M2.1 Scaled PushPull Profile")
+                scaled_target = {"homecad_id": scaled_group}
+                face_selector = await child_face(scaled_group)
+                await call("transform_object", {"target": scaled_target,
+                    "transform": {"type": "scale", "origin_mm": [0, 0, 0], "factors": [2, 3, 1]}})
+                scaled_before = await get(scaled_target)
+                await expected_error("push_pull", {"target": face_selector, "distance_mm": 80}, "constraint_violation")
+                scaled_after = await get(scaled_target)
+                if scaled_after.get("metadata", {}).get("revision") != scaled_before.get("metadata", {}).get("revision"):
+                    raise SmokeError("Rejected scaled push_pull changed the object revision")
+                if scaled_after.get("bbox_mm") != scaled_before.get("bbox_mm"):
+                    raise SmokeError("Rejected scaled push_pull changed geometry")
+                await undo_one()  # scale
+                await undo_one()  # profile creation
 
-            undo_transform, _ = await call("undo")
-            if undo_transform.get("actions") != 1:
-                raise SmokeError("Undo did not queue exactly one SketchUp action")
-            restored = None
-            for _ in range(20):
-                await asyncio.sleep(0.25)
-                restored, _ = await call("get_object", {"target": target})
-                restored_min = restored["bbox_mm"]["min"]
-                if all(abs(a - b) <= 0.5 for a, b in zip(restored_min, original_min)):
-                    break
-            else:
-                raise SmokeError("Undo did not restore the box position")
+                # L-shaped sweep: temporary path edges should not survive unless shared with the sweep.
+                follow_group = await create_face([[0, 0, 0], [0, 50, 0], [0, 50, 50], [0, 0, 50]],
+                                                 "M2.1 FollowMe Profile")
+                follow_face = await child_face(follow_group)
+                sweep, _ = await call("follow_me", {"target": follow_face,
+                    "path_points_mm": [[0, 0, 0], [200, 0, 0], [200, 150, 0]]})
+                if sweep.get("status") != "success" or sweep.get("updated", [{}])[0].get("identity", {}).get("homecad_id") != follow_group:
+                    raise SmokeError("follow_me did not update the profile Group")
+                edges, _ = await call("list_objects", {
+                    "parent": {"homecad_id": follow_group}, "entity_type": "Edge",
+                    "include_generated": True, "limit": 512,
+                })
+                retained_path = False
+                expected_segments = [([0, 0, 0], [200, 0, 0]), ([200, 0, 0], [200, 150, 0])]
+                for edge in edges.get("objects", []):
+                    identity = edge.get("identity", {})
+                    selector = {key: identity[key] for key in ("persistent_id", "entity_id")
+                                if identity.get(key) is not None}
+                    if not selector:
+                        continue
+                    details = await get(selector)
+                    bounds = details.get("bbox_mm") or {}
+                    for first, last in expected_segments:
+                        wanted_min = [min(a, b) for a, b in zip(first, last)]
+                        wanted_max = [max(a, b) for a, b in zip(first, last)]
+                        actual_min, actual_max = bounds.get("min"), bounds.get("max")
+                        if actual_min and actual_max and all(
+                            abs(actual_min[index] - wanted_min[index]) <= 0.5 and
+                            abs(actual_max[index] - wanted_max[index]) <= 0.5 for index in range(3)
+                        ):
+                            retained_path = True
+                has_retention_warning = any("path edges" in warning.lower() and "retained" in warning.lower()
+                                            for warning in sweep.get("warnings", []))
+                if retained_path and not has_retention_warning:
+                    raise SmokeError("Follow Me retained a path edge without reporting its warning")
+                if has_retention_warning:
+                    print("Follow Me retained a path edge connected to the swept topology, as documented.")
+                else:
+                    print("Follow Me temporary path edges were removed.")
+                await screenshot(output.with_name(output.stem + "-follow-me.png"), {"homecad_id": follow_group})
+                await undo_one()
+                await undo_one()
 
-            undo_creation, _ = await call("undo")
-            if undo_creation.get("actions") != 1:
-                raise SmokeError("Undo did not queue exactly one SketchUp action")
-            for _ in range(20):
-                await asyncio.sleep(0.25)
-                missing, _ = await call("find_objects", {"homecad_id": homecad_id, "limit": 5})
-                if missing.get("resolution") == "none":
-                    break
-            else:
-                raise SmokeError("Undo did not remove the created box")
-            model_after, _ = await call("get_model_info")
-            print(f"Final model modified state: {model_after['modified']}")
-            print("M2 smoke passed. Check whether the model modified state matches its initial value.")
+                remaining = [identifier for identifier in created_ids if (await find(identifier)).get("resolution") != "none"]
+                if remaining:
+                    raise SmokeError(f"Smoke-created objects remain after undo: {remaining}")
+                final, _ = await call("get_model_info")
+                print(f"Final model modified state: {final['modified']}")
+                if final.get("modified") != initial.get("modified"):
+                    print("WARNING: model modified state differs from its initial value; save state may need review.")
+                print("M2.1 smoke passed. Confirm screenshots and camera restoration in SketchUp.")
+            finally:
+                if pending_undos:
+                    print(f"Cleanup: issuing {pending_undos} native Undo action(s).", file=sys.stderr)
+                    try:
+                        while pending_undos:
+                            await undo_one()
+                    except Exception as error:  # Best effort only; explicitly report uncertain model state.
+                        print(f"CLEANUP FAILED: disposable model may still contain smoke geometry ({error}).", file=sys.stderr)
 
 
 def main() -> None:

@@ -21,6 +21,13 @@
 - `list_furniture_parts` is calculated from parameters and stable logical keys; it never depends on generated SketchUp child IDs or current detail level.
 - M4 adds Furniture only. Kitchen composition, appliances, electrical, lighting, and arbitrary Ruby evaluation remain out of scope.
 
+### Implementation note
+
+- Public Cabinet parameters are validated before opening an operation. A successful create/update/delete uses exactly one `HomeCAD::Operation`; invalid dimensions, placements, shelves, fronts, and wall fit fail before mutation. Generation exceptions abort through the shared operation wrapper.
+- The Cabinet root transformation is built from unit axes and millimeter origin. Dimensions are generated as panel geometry, so the root has no scale. For a Wall update, `WallAttachment` precomputes every dependent transform and checks U span and vertical fit before Architecture opens its operation.
+- Wall attachment metadata is a searchable projection of canonical Furniture placement parameters. `span_u_mm` derives from Cabinet width. Wall direction reversal recomputes the world transform from unchanged wall-local parameters.
+- Deleting a Wall with attached Cabinets requires explicit `cascade=true`; Architecture serializes all dependency tombstones before erasing them in one operation.
+
 ## Reference review
 
 Reviewed current remote HEADs; no reference code was copied.

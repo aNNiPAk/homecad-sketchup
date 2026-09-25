@@ -4,6 +4,9 @@
 
 ### Added
 
+- M4 Furniture Core: a parametric Cabinet with concept/construction detail, shelves, configurable fronts, stable local frame, parameter-derived part schedule, and wall-local placement under `furniture.core.v1`.
+- Generic WallAttachment indexing and dependency handling; Wall updates relocate attached Cabinets after preflight, and cascaded Wall deletion returns Cabinet tombstones in the same Undo operation.
+- M4 MCP tools, cross-language Cabinet fixture coverage, explicit RBZ packaging checks, and guarded disposable-model `smoke_m4.py`.
 - M3 Architecture: generated Walls with local U/V/Z frames, hosted Openings/Doors/Windows/Niches, rectangular Columns, ordered Rooms, and conservative read-only room detection under `architecture.core.v1`.
 - Architecture parameter/relationship storage, deterministic wall cut regeneration, hosted dependency validation, revision-aware generic updates/deletion, and a disposable SketchUp M3 smoke test.
 - Python/Ruby M3 tool schemas, annotations, capability checks, cross-language fixture coverage, and explicit RBZ packaging assertions for the architecture runtime.
@@ -22,7 +25,8 @@
 - Renamed generic entity `dimensions_mm` / `measure(kind="dimensions")` to `bbox_dimensions_mm` / `measure(kind="bbox_dimensions")`; both now state explicitly that values are world-aligned bounding-box extents. Bumped the pre-1.0 version to 0.3.0 for M1.1 and 0.4.0 for M2.
 - Bumped the pre-1.0 version to 0.4.2 after the SketchUp 26.2 smoke exposed reversed bounds from the prior `split` result selection. The rebuilt `subtract` direction was confirmed by the asymmetric SketchUp 26.2.243 smoke.
 - Bumped the pre-1.0 version to 0.5.0 for the additive Architecture domain capability and tool set. Protocol version remains 1.
-- M2 remains a low-level fallback. M3 adds Architecture only; Furniture, Kitchen, Electrical, Lighting, and `eval_ruby` are not included.
+- M2 remains a low-level fallback. M3 adds Architecture and M4 adds the Cabinet Furniture core; Kitchen, Electrical, Lighting, and `eval_ruby` are not included.
+- Bumped the pre-1.0 version to 0.6.0 for the additive Furniture capability and Cabinet tools. Protocol version remains 1.
 
 ### Fixed
 

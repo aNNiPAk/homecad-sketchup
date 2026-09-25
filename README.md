@@ -1,10 +1,10 @@
 # HomeCAD for SketchUp
 
-HomeCAD is a local MCP interface for inspecting and safely editing a SketchUp scene. M3 adds a semantic parametric Architecture layer. M2 primitives remain a low-level developer/fallback API. The roadmap is in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+HomeCAD is a local MCP interface for inspecting and safely editing a SketchUp scene. M3 adds a semantic parametric Architecture layer and M4 adds the Furniture Core Cabinet model. M2 primitives remain a low-level developer/fallback API. The roadmap is in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
 ## Requirements
 
-- Windows with SketchUp and Ruby extension support. Install the matching M3 RBZ for architecture tools.
+- Windows with SketchUp and Ruby extension support. Install the matching M4 RBZ for Furniture tools.
 - [uv](https://docs.astral.sh/uv/) with Python 3.11+ for MCP and packaging.
 - Ruby 3.x for standalone Ruby tests; SketchUp supplies its own runtime when the extension is installed.
 
@@ -17,7 +17,7 @@ uv sync --project mcp
 uv run --project mcp python scripts/build_rbz.py
 ```
 
-Install `dist\homecad.rbz` with **SketchUp → Extensions → Extension Manager → Install Extension**, then restart SketchUp. The Ruby Console should show `[HomeCAD] INFO listening on 127.0.0.1:37941`. Confirm that `homecad_status.ruby_extension_version` says `0.5.0` and that it advertises `architecture.core.v1` before running the M3 smoke test.
+Install `dist\homecad.rbz` with **SketchUp → Extensions → Extension Manager → Install Extension**, then restart SketchUp. The Ruby Console should show `[HomeCAD] INFO listening on 127.0.0.1:37941`. Confirm that `homecad_status.ruby_extension_version` says `0.6.0` and that it advertises `furniture.core.v1` before running the M4 smoke test.
 
 The M0 connection check remains available:
 
@@ -77,6 +77,22 @@ uv run --project mcp python scripts/smoke_m3.py --confirm-disposable
 ```
 
 It exercises wall frame and cuts, hosted window/door regeneration after a wall rotation, rejected invalid shortening, a partial niche, conservative Room detection/creation, screenshots, and native Undo cleanup. See [the M3 contract](tests/contracts/m3.md) and [M3 decisions](docs/M3_DECISIONS.md). A SketchUp kernel run is still needed to accept manifoldness, niche depth, generated concept geometry, and Undo behavior in SketchUp 26.2.
+
+## Furniture Core (M4)
+
+M4 adds `furniture.core.v1` and a parametric `furniture.cabinet`. Use `create_cabinet`, `get_furniture_frame`, and `list_furniture_parts` to create and inspect a cabinet; `update_furniture_object` changes semantic parameters and regenerates its generated panels. `delete_furniture_object` returns a pre-delete tombstone. Cabinet root identity is preserved by updates, and primitive mutation tools cannot edit the Cabinet or nested generated parts.
+
+Cabinet local origin is back-left-bottom. Local X is width, Y runs from back to front, and Z is vertical. World placement uses a global-Z rotation. Wall placement stores offset, bottom, side, and clearance in the Wall's local frame; the Cabinet follows Wall translation, rotation, and direction changes without changing these parameters. Wall shortening/height changes are rejected if the Cabinet no longer fits. Deleting a Wall with an attached Cabinet requires `cascade=true` and removes both in one Undo operation.
+
+`construction` detail creates separate generated carcass, back, shelf, and front panel Groups. `concept` detail keeps a simple case envelope and front planes. `list_furniture_parts` is parameter-derived and stable across these detail levels. The current core does not model hinges, hardware, drawer boxes, appliances, Kitchen runs, Electrical, or Lighting.
+
+Run the M4 smoke only in a disposable SketchUp model. It creates a test Wall and Cabinet, checks frame/schedule and dependency relocation, captures an image, exercises updates and cascade-delete Undo, and verifies test identities are gone:
+
+```powershell
+uv run --project mcp python scripts/smoke_m4.py --confirm-disposable
+```
+
+See [the M4 contract](tests/contracts/m4.md) and [M4 decisions](docs/M4_DECISIONS.md). Standalone fakes cannot verify actual SketchUp panel topology, view framing, wall-host placement, or native Undo behavior; those require a SketchUp kernel run.
 
 ## Configuration
 

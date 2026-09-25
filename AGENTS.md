@@ -33,3 +33,5 @@ HomeCAD architecture invariants
 - If introduced later, `eval_ruby` is an escape hatch and must not be used for normal workflows.
 - Read reference repository licenses before copying code.
 - Do not copy AGPL code from SidhNor/sketchup-mcp-server. It may be used only as an architectural reference unless licensing is explicitly reconsidered.
+- Generated Furniture and other domain objects must be changed through their parameter tools and regenerated; primitive tools may not edit generated roots or descendants.
+- Keep Cabinet dimensions in generated geometry and placement in rigid transforms; never use root scaling to represent editable Furniture dimensions.

@@ -55,6 +55,7 @@ module Sketchup
     end
     def perspective? = @perspective
     def fov = 35.0
+    def fov_is_height? = true
     def height = @height || 100.0
     def set(eye, target, up)
       @eye, @target, @up = eye, target, up

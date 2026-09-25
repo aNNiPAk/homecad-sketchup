@@ -8,6 +8,7 @@
 
 ### Fixed
 
+- Camera snapshots now include perspective FOV orientation and reject a capture before changing the viewport when the Ruby API cannot reproduce that orientation.
 - Capture now reconstructs an independent camera snapshot before changing the view, restores it without a transition, and frames model bounds without invoking `View#zoom_extents`.
 - The M1 smoke script can use a single selected unnamed object when `--name` is absent or has no match, and reports expected errors without an `ExceptionGroup` traceback.
 - Python MCP refuses `capture_view` against an older loaded RBZ with the camera restoration bug while keeping M0 status calls available.

@@ -60,10 +60,15 @@ module HomeCAD
       point = ->(value) { Geom::Point3d.new(value.x, value.y, value.z) }
       up = Geom::Vector3d.new(source.up.x, source.up.y, source.up.z)
       perspective = source.perspective?
+      fov_is_height = source.fov_is_height? if perspective && source.respond_to?(:fov_is_height?)
       copy = Sketchup::Camera.new(point.call(source.eye), point.call(source.target), up,
                                    perspective, perspective ? source.fov : 30.0)
       copy.height = source.height unless perspective
       copy.aspect_ratio = source.aspect_ratio if source.respond_to?(:aspect_ratio)
+      if !fov_is_height.nil? && copy.respond_to?(:fov_is_height?) && copy.fov_is_height? != fov_is_height
+        raise Runtime::BridgeError.new(-32004, 'constraint_violation',
+                                       'SketchUp Ruby API cannot safely reproduce this camera FOV orientation')
+      end
       copy
     end
 
@@ -87,6 +92,7 @@ module HomeCAD
         'up' => camera.respond_to?(:up) ? [camera.up.x, camera.up.y, camera.up.z] : nil,
         'perspective' => perspective,
         'fov' => perspective && camera.respond_to?(:fov) ? camera.fov : nil,
+        'fov_is_height' => perspective && camera.respond_to?(:fov_is_height?) ? camera.fov_is_height? : nil,
         'height_mm' => perspective == false && camera.respond_to?(:height) ? Units.internal_to_mm(camera.height) : nil,
         'aspect_ratio' => camera.respond_to?(:aspect_ratio) ? camera.aspect_ratio : nil }
     end

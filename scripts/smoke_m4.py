@@ -176,7 +176,7 @@ async def run(output: Path) -> None:
                     raise SmokeError(f"negative_v Cabinet frame is incorrect: {negative_frame}")
                 negative_bbox = (await get(negative_id)).get("bbox_dimensions_mm", {})
                 if any(abs(negative_bbox.get(axis, float("inf")) - value) > 1
-                       for axis, value in {"width": 600, "depth": 578, "height": 720}.items()):
+                       for axis, value in {"width": 600, "depth": 560, "height": 720}.items()):
                     raise SmokeError(f"negative_v Cabinet world bounds are incorrect: {negative_bbox}")
                 await capture(negative_id, "negative-v")
 

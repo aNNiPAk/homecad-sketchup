@@ -96,7 +96,16 @@ async def run(output: Path) -> None:
                 expected_bbox = {"width": 600, "depth": 578, "height": 720}
                 if any(abs(bbox_dimensions.get(axis, float("inf")) - value) > 1
                        for axis, value in expected_bbox.items()):
-                    raise SmokeError(f"generated Cabinet geometry bounds are incorrect: {bbox_dimensions}")
+                    parts, _ = await call("list_objects", {"parent": {"homecad_id": cabinet_id},
+                        "include_generated": True, "limit": 32})
+                    details = []
+                    for part in parts.get("objects", []):
+                        part_id = part.get("identity", {}).get("persistent_id")
+                        if part_id is not None:
+                            part_info, _ = await call("get_object", {"target": {"persistent_id": part_id}})
+                            details.append({"name": part.get("name"), "bbox_mm": part_info.get("bbox_mm"),
+                                "bbox_dimensions_mm": part_info.get("bbox_dimensions_mm")})
+                    raise SmokeError(f"generated Cabinet geometry bounds are incorrect: {bbox_dimensions}; parts={details}")
                 frame, _ = await call("get_furniture_frame", {"target": {"homecad_id": cabinet_id}})
                 if frame["width_mm"] != 600 or frame["depth_mm"] != 560 or frame["height_mm"] != 720:
                     raise SmokeError("Furniture frame does not match the requested case dimensions")

@@ -215,6 +215,6 @@ def test_furniture_methods_require_advertised_capability():
         })
     assert missing.value.category == "unsupported_operation"
     BridgeClient._check_method_capability("create_cabinet", {
-        "protocol_version": 1, "ruby_extension_version": "0.6.0",
+        "protocol_version": 1, "ruby_extension_version": "0.6.1",
         "capabilities": ["furniture.core.v1", "unknown.future.capability.v9"],
     })

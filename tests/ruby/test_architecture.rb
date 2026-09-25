@@ -88,8 +88,18 @@ module Sketchup
     def layer = nil
     def material = nil
     def attribute_dictionary(*) = nil
+    def normal
+      first = @points[1]; origin = @points[0]; last = @points[2]
+      ax = first.x - origin.x; ay = first.y - origin.y; az = first.z - origin.z
+      bx = last.x - origin.x; by = last.y - origin.y; bz = last.z - origin.z
+      vector = Geom::Vector3d.new(ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx)
+      length = vector.length
+      Geom::Vector3d.new(vector.x / length, vector.y / length, vector.z / length)
+    end
     def pushpull(distance)
-      @parent.add_points(@points.map { |point| Geom::Point3d.new(point.x, point.y, point.z + distance) })
+      direction = normal
+      @parent.add_points(@points.map { |point| Geom::Point3d.new(point.x + direction.x * distance,
+        point.y + direction.y * distance, point.z + direction.z * distance) })
       nil
     end
   end

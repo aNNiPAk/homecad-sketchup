@@ -26,11 +26,12 @@
 - Bumped the pre-1.0 version to 0.4.2 after the SketchUp 26.2 smoke exposed reversed bounds from the prior `split` result selection. The rebuilt `subtract` direction was confirmed by the asymmetric SketchUp 26.2.243 smoke.
 - Bumped the pre-1.0 version to 0.5.0 for the additive Architecture domain capability and tool set. Protocol version remains 1.
 - M2 remains a low-level fallback. M3 adds Architecture and M4 adds the Cabinet Furniture core; Kitchen, Electrical, Lighting, and `eval_ruby` are not included.
+- Bumped the pre-1.0 version to 0.6.1 for the Cabinet geometry correction. Protocol version remains 1.
 - Bumped the pre-1.0 version to 0.6.0 for the additive Furniture capability and Cabinet tools. Protocol version remains 1.
 
 ### Fixed
 
-- M4 Cabinet construction parts now use correct local axes and units; right-side placement no longer double-converts millimeters, and shelves no longer extrude along the cabinet height.
+- Cabinet part extrusion now follows positive world Z regardless of face normal; right-side placement remains in millimeters without double conversion.
 - Empty semantic hosted objects now retain stable SketchUp identity with a hidden construction-point anchor, and anchors follow wall regeneration.
 - Room updates and dependent Wall regeneration now recalculate boundary points, area, Room-facing sides, relationships, and reference geometry from current ordered wall IDs.
 - Camera snapshots now include perspective FOV orientation and reject a capture before changing the viewport when the Ruby API cannot reproduce that orientation.

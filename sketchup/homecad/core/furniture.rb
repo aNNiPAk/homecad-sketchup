@@ -282,8 +282,18 @@ module HomeCAD
               Geom::Point3d.new(ox + dx, oy + dy, oz), Geom::Point3d.new(ox, oy + dy, oz)]
       face = collection.entities.add_face(base)
       Primitives.geometry_created!(face, "SketchUp could not create cabinet part #{part['part_key']}")
-      face.pushpull(dz)
+      extrude_to_positive_z!(face, dz, part['part_key'])
       collection
+    end
+
+    def self.extrude_to_positive_z!(face, distance, part_key)
+      normal_z = face.normal.z
+      unless normal_z.is_a?(Numeric) && normal_z.finite? && normal_z.abs > 1e-9
+        raise Runtime::BridgeError.new(-32009, 'geometry_error',
+          "cabinet part #{part_key} base face is not horizontal")
+      end
+
+      face.pushpull(normal_z.positive? ? distance : -distance)
     end
 
     def self.root_width_mm(root)

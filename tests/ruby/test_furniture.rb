@@ -52,6 +52,14 @@ class FurnitureTest < Minitest::Test
     assert_equal before + 1, @model.events.count { |event| event.first == :start }
   end
 
+  def test_part_extrusion_follows_positive_world_z_for_reversed_face_normal
+    face = Object.new
+    face.define_singleton_method(:normal) { Geom::Vector3d.new(0, 0, -1) }
+    face.define_singleton_method(:pushpull) { |distance| @distance = distance }
+    HomeCAD::Furniture.extrude_to_positive_z!(face, 12.0, 'test')
+    assert_equal(-12.0, face.instance_variable_get(:@distance))
+  end
+
   def assert_point_bounds(min_mm, max_mm, entity)
     box = entity.bounds
     actual_min = box.corner(0)

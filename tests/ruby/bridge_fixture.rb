@@ -171,8 +171,18 @@ class FixtureFace < FixtureEntity
     super(persistent_id: id, typename: 'Face', model: model, parent: group)
     group.add_points(points)
   end
+  def normal
+    origin, first, last = points[0], points[1], points[2]
+    a = FixtureVector.new(first.x - origin.x, first.y - origin.y, first.z - origin.z)
+    b = FixtureVector.new(last.x - origin.x, last.y - origin.y, last.z - origin.z)
+    vector = a.cross(b)
+    vector.length = 1.0
+    vector
+  end
   def pushpull(distance)
-    group.add_points(points.map { |point| FixturePoint.new(point.x, point.y, point.z + distance) })
+    direction = normal
+    group.add_points(points.map { |point| FixturePoint.new(point.x + direction.x * distance,
+      point.y + direction.y * distance, point.z + direction.z * distance) })
     nil
   end
   def followme(edges) = !edges.empty?
@@ -310,7 +320,7 @@ module Sketchup
 end
 
 module HomeCAD
-  VERSION = '0.6.0'
+  VERSION = '0.6.1'
   PROTOCOL_VERSION = 1
 end
 

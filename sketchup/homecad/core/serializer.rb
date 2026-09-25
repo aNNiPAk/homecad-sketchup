@@ -23,7 +23,7 @@ module HomeCAD
                     'visible' => visible?(entity),
                     'locked' => entity.respond_to?(:locked?) ? entity.locked? : false,
                     'bbox_mm' => bounds(entry),
-                    'dimensions_mm' => dimensions(entry),
+                    'bbox_dimensions_mm' => bbox_dimensions(entry),
                     'context' => entry.parent ? 'nested' : 'root',
                     'parent' => parent_identity(entry))
       return result if level == 'standard'
@@ -72,7 +72,7 @@ module HomeCAD
         'max' => max.map { |v| Units.internal_to_mm(v) } }
     end
 
-    def self.dimensions(entry)
+    def self.bbox_dimensions(entry)
       box = bounds(entry)
       return nil unless box
 

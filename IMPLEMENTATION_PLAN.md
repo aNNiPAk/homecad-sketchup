@@ -378,7 +378,7 @@ type
 name
 metadata
 bbox_mm
-dimensions_mm
+bbox_dimensions_mm
 transformation
 parent
 children

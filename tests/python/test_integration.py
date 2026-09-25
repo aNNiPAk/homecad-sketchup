@@ -60,10 +60,11 @@ async def test_python_to_ruby_bridge():
         target = found["objects"][0]["identity"]
         object_info = await client.call("get_object", {"target": {"persistent_id": 11}})
         assert object_info["identity"] == target
-        assert object_info["dimensions_mm"]["width"] == 25.4
-        measured = await client.call("measure", {"kind": "dimensions", "target": {"persistent_id": 11}})
+        assert object_info["bbox_dimensions_mm"]["width"] == 25.4
+        measured = await client.call("measure", {"kind": "bbox_dimensions", "target": {"persistent_id": 11}})
         assert measured["unit"] == "mm"
         assert measured["targets"] == [target]
+        assert measured["value"] == object_info["bbox_dimensions_mm"]
         selected = await client.call("get_selection")
         assert selected["objects"][0]["identity"] == target
         for direction in ("top", "iso"):

@@ -1,6 +1,6 @@
 module HomeCAD
   module Measurement
-    KINDS = %w[bounds dimensions center_distance bbox_distance face_area edge_length].freeze
+    KINDS = %w[bounds bbox_dimensions center_distance bbox_distance face_area edge_length].freeze
 
     def self.measure(model, params)
       Inspection.check_keys!(params, %w[kind target other_target])
@@ -16,7 +16,7 @@ module HomeCAD
       targets = [first, second].compact.map { |entry| Targeting.identity(entry) }
       value, unit = case kind
                     when 'bounds' then [required_bounds(first), 'mm']
-                    when 'dimensions' then [Serializer.dimensions(first) || geometry_error!, 'mm']
+                    when 'bbox_dimensions' then [Serializer.bbox_dimensions(first) || geometry_error!, 'mm']
                     when 'center_distance' then [center_distance(first, second), 'mm']
                     when 'bbox_distance' then [bbox_distance(first, second), 'mm']
                     when 'face_area' then [face_area(first), 'mm²']

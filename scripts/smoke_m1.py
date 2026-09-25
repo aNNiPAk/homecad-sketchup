@@ -97,7 +97,7 @@ async def run(name: str | None, output: Path) -> None:
             object_data, _ = await call("get_object", {"target": target})
             if object_data["identity"] != identity:
                 raise SmokeError("get_object returned a different identity")
-            await call("measure", {"kind": "dimensions", "target": target})
+            await call("measure", {"kind": "bbox_dimensions", "target": target})
 
             output.mkdir(parents=True, exist_ok=True)
             for view in ("top", "iso"):

@@ -12,7 +12,7 @@ root = File.expand_path('../../sketchup/homecad/core', __dir__)
 %w[units scene targeting serializer].each { |name| require File.join(root, name) }
 
 Point = Struct.new(:x, :y, :z) do
-  def transform(_matrix) = self
+  def transform(matrix) = matrix.apply(self)
 end
 Box = Struct.new(:empty) do
   def empty? = empty
@@ -21,6 +21,13 @@ end
 Entity = Struct.new(:persistent_id, :entityID, :typename, :name, :bounds, keyword_init: true) do
   def attribute_dictionary(*) = nil
   def valid? = true
+end
+class Rotate45
+  def apply(point)
+    angle = Math::PI / 4
+    Point.new(point.x * Math.cos(angle) - point.y * Math.sin(angle),
+              point.x * Math.sin(angle) + point.y * Math.cos(angle), point.z)
+  end
 end
 
 class SerializerTest < Minitest::Test
@@ -38,8 +45,17 @@ class SerializerTest < Minitest::Test
     assert_nil detailed['identity']['homecad_id']
     assert_equal 7, detailed['identity']['persistent_id']
     assert_equal 17, detailed['identity']['entity_id']
-    assert_equal 25.4, detailed['dimensions_mm']['width']
-    assert_equal 25.4, detailed['dimensions_mm']['height']
+    assert_equal 25.4, detailed['bbox_dimensions_mm']['width']
+    assert_equal 25.4, detailed['bbox_dimensions_mm']['height']
+    refute detailed.key?('dimensions_mm')
+  end
+
+  def test_dimensions_explicitly_describe_rotated_world_aligned_bbox
+    rotated = HomeCAD::Scene::Entry.new(entity: @entry.entity, parent: nil, path: [7], transform: Rotate45.new)
+    dimensions = HomeCAD::Serializer.serialize(rotated, level: 'standard')['bbox_dimensions_mm']
+    assert_in_delta Math.sqrt(2) * 25.4, dimensions['width'], 0.0001
+    assert_in_delta Math.sqrt(2) * 25.4, dimensions['depth'], 0.0001
+    assert_equal 25.4, dimensions['height']
   end
 
   def test_empty_bounds_are_null

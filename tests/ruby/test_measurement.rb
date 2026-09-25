@@ -47,7 +47,13 @@ class MeasurementTest < Minitest::Test
   end
 
   def test_dimensions_and_distances
-    assert_equal 25.4, measure('dimensions')['value']['width']
+    dimensions = measure('bbox_dimensions')
+    assert_equal 'bbox_dimensions', dimensions['kind']
+    assert_equal 25.4, dimensions['value']['width']
+    assert_equal 25.4, dimensions['value']['height']
+    assert_equal 'invalid_request', assert_raises(HomeCAD::Runtime::BridgeError) {
+      measure('dimensions')
+    }.category
     assert_in_delta 76.2, measure('center_distance', 1, 2)['value'], 0.0001
     assert_in_delta 50.8, measure('bbox_distance', 1, 2)['value'], 0.0001
     assert_equal 2, measure('center_distance', 1, 2)['targets'].length

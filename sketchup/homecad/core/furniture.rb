@@ -234,8 +234,7 @@ module HomeCAD
         [[x, 0, 0], [x, 0, z], [x, y, z], [x, y, 0]],
         [[0, 0, 0], [x, 0, 0], [x, y, 0], [0, y, 0]],
         [[0, 0, z], [0, y, z], [x, y, z], [x, 0, z]],
-        [[0, 0, 0], [0, 0, z], [x, 0, z], [x, 0, 0]],
-        [[0, y, 0], [x, y, 0], [x, y, z], [0, y, z]]
+        [[0, 0, 0], [0, 0, z], [x, 0, z], [x, 0, 0]]
       ]
       surfaces.each do |points|
         face = group.entities.add_face(points.map { |point| Geometry.point_mm(point, 'cabinet.surface') })

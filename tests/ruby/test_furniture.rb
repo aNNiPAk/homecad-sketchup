@@ -98,7 +98,8 @@ class FurnitureTest < Minitest::Test
     assert_equal frame, HomeCAD::Furniture.get_frame(@model, 'target' => { 'homecad_id' => cabinet_id })
     assert_equal keys, HomeCAD::Furniture.list_parts(@model, 'target' => { 'homecad_id' => cabinet_id })['parts'].map { |part| part['part_key'] }
     assert_equal 'concept', HomeCAD::FurnitureData.read_params(root)['detail_level']
-    assert_equal 7, root.entities.length
+    # Five open case surfaces plus the configured concept front plane.
+    assert_equal 6, root.entities.length
     refute_equal construction_children, root.entities.map(&:object_id)
 
     construction = HomeCAD::Furniture.update_object(@model, 'target' => { 'homecad_id' => cabinet_id },

@@ -11,7 +11,7 @@ Architecture objects are generated from semantic parameters and cannot be safely
 ## Decision
 
 - M4 exposes one Furniture domain object, `furniture.cabinet`, behind `furniture.core.v1`.
-- Cabinet parameters in `FurnitureData` are the source of truth. Construction detail regenerates nested part Groups; concept detail regenerates a case envelope and front planes. The root Group and `homecad_id` survive updates.
+- Cabinet parameters in `FurnitureData` are the source of truth. Construction detail regenerates nested part Groups; concept detail regenerates a five-surface case open at the front plus configured front planes. The root Group and `homecad_id` survive updates.
 - Cabinet local origin is back-left-bottom; X is width, Y is back-to-front, and Z is up. The local frame is right-handed. Cabinet dimensions are generated geometry; the root transform contains only rigid placement.
 - World placement is a millimeter origin plus global-Z angle. Wall placement stores a Wall UUID, U offset, base elevation, side, and clearance in Wall-local coordinates.
 - `WallAttachment` is the generic dependency projection. Cabinet width determines its searchable U span. Wall changes are preflighted before the shared operation; valid changes relocate Cabinet roots while retaining wall-local parameters. Wall deletion requires cascade when attachments exist.

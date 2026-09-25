@@ -152,8 +152,8 @@ async def run(output: Path) -> None:
                 if concept["revision"] != 2:
                     raise SmokeError("concept LOD did not increment the Cabinet revision once")
                 concept_info = await get(cabinet_id)
-                if concept_info["children"].get("by_type") != {"Face": 7}:
-                    raise SmokeError("concept LOD did not replace construction Groups with seven Faces")
+                if concept_info["children"].get("by_type") != {"Edge": 12, "Face": 6}:
+                    raise SmokeError("concept LOD did not create five case surfaces and the configured front plane")
                 concept_frame, _ = await call("get_furniture_frame", {"target": {"homecad_id": cabinet_id}})
                 concept_schedule, _ = await call("list_furniture_parts", {"target": {"homecad_id": cabinet_id}})
                 if concept_frame != frame or [part["part_key"] for part in concept_schedule["parts"]] != part_keys:

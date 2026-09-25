@@ -31,7 +31,7 @@
 
 ### Fixed
 
-- M4 Furniture revisions now track canonical parameter changes, generic WallAttachment projections cover horizontal and vertical fit spans, and Cabinet LOD/zero-back behavior is hardened.
+- M4 Furniture revisions now track canonical parameter changes, generic WallAttachment projections cover horizontal and vertical fit spans, Cabinet LOD/zero-back behavior is hardened, and concept fronts no longer overlap the case envelope face.
 - Cabinet part extrusion now follows positive world Z regardless of face normal; right-side placement remains in millimeters without double conversion.
 - Empty semantic hosted objects now retain stable SketchUp identity with a hidden construction-point anchor, and anchors follow wall regeneration.
 - Room updates and dependent Wall regeneration now recalculate boundary points, area, Room-facing sides, relationships, and reference geometry from current ordered wall IDs.

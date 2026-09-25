@@ -31,7 +31,7 @@ To run the complete M1 inspection smoke test, select exactly one Group or Compon
 uv run --project mcp python scripts/smoke_m1.py
 ```
 
-The script connects, reads model information, lists a bounded page, finds and inspects the selected object, measures its dimensions, reads selection, captures top and iso views, then rereads the camera after each capture. PNGs are saved under ignored `dist\m1-smoke\`. `--name "Exact known object name"` is optional; if it has no match, the script explicitly falls back to the single selected object. Ambiguous names produce a short error. The script does not invoke `undo` because that would modify the open model's history.
+The script first checks that SketchUp has loaded the matching RBZ, then reads model information, lists a bounded page, finds and inspects the selected object, measures its dimensions, reads selection, captures top and iso views, and rereads the camera after each capture. PNGs are saved under ignored `dist\m1-smoke\`. `--name "Exact known object name"` is optional; if it has no match, the script explicitly falls back to the single selected object. Ambiguous names produce a short error. The script does not invoke `undo` because that would modify the open model's history.
 
 For an MCP host, configure a stdio server with command `uv` and arguments `run --project D:\GitHub\homecad-sketchup\mcp python -m homecad_mcp` (replace the checkout path as needed). The `capture_view` tool returns an MCP `image/png` block alongside JSON metadata, so an image-capable host can display it directly.
 

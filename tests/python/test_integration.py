@@ -12,8 +12,14 @@ from mcp.client.stdio import stdio_client
 from homecad_mcp.config import Config
 from homecad_mcp.connection import BridgeClient
 from homecad_mcp.errors import BridgeError
+from scripts.smoke_m1 import SmokeError, check_bridge_version
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_m1_smoke_rejects_old_loaded_rbz_before_capture():
+    with pytest.raises(SmokeError, match="restart SketchUp before capture"):
+        check_bridge_version({"ruby_extension_version": "0.2.0"})
 
 
 @pytest.mark.asyncio

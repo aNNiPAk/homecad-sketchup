@@ -10,10 +10,20 @@ from pathlib import Path
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from homecad_mcp import VERSION
 
 
 class SmokeError(RuntimeError):
     """Expected failure with a short, actionable CLI message."""
+
+
+def check_bridge_version(status: dict) -> None:
+    installed = status.get("ruby_extension_version")
+    if installed != VERSION:
+        raise SmokeError(
+            f"SketchUp has HomeCAD RBZ {installed!r}; this smoke test needs {VERSION}. "
+            "Install dist\\homecad.rbz and restart SketchUp before capture."
+        )
 
 
 def same_camera(before: dict, after: dict) -> bool:
@@ -59,6 +69,7 @@ async def run(name: str | None, output: Path) -> None:
             status, _ = await call("homecad_status")
             if status["connection_status"] != "connected":
                 raise SmokeError("Open SketchUp with HomeCAD enabled before running M1 smoke")
+            check_bridge_version(status)
             model_before, _ = await call("get_model_info")
             await call("list_objects", {"limit": 10})
             selection, _ = await call("get_selection", {"limit": 10})

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from homecad_mcp import VERSION
 
 
 class SmokeError(RuntimeError):
@@ -43,13 +44,14 @@ async def run(output: Path) -> None:
                     text = next((item.text for item in result.content if item.type == "text"), "unknown error")
                     raise SmokeError(f"{tool}: {text}")
                 data = next((json.loads(item.text) for item in result.content if item.type == "text"), {})
-                print(f"{tool}: {json.dumps(data, ensure_ascii=False)}")
                 if data.get("status") == "success" and tool in {
                     "create_box", "create_face", "push_pull", "follow_me", "transform_object", "boolean_operation"
                 }:
                     pending_undos += 1
                     created_ids.extend(obj["identity"]["homecad_id"] for obj in data.get("created", [])
                                        if obj.get("identity", {}).get("homecad_id"))
+                # ASCII-escaped JSON is reliable in Windows consoles using legacy code pages.
+                print(f"{tool}: {json.dumps(data, ensure_ascii=True)}")
                 return data, result.content
 
             async def expected_error(tool: str, arguments: dict, category: str) -> str:
@@ -119,6 +121,11 @@ async def run(output: Path) -> None:
             status, _ = await call("homecad_status")
             if status.get("connection_status") != "connected":
                 raise SmokeError("Open SketchUp with HomeCAD enabled before running this smoke test")
+            if status.get("ruby_extension_version") != VERSION:
+                raise SmokeError(
+                    f"MCP package is {VERSION}, but installed Ruby extension is "
+                    f"{status.get('ruby_extension_version')!r}; rebuild/install the matching RBZ and restart SketchUp"
+                )
             if "geometry.primitive.v1" not in status.get("capabilities", []):
                 raise SmokeError("Installed RBZ does not advertise geometry.primitive.v1; rebuild, reinstall, and restart SketchUp")
             initial, _ = await call("get_model_info")

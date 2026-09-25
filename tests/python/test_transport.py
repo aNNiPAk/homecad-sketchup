@@ -78,6 +78,37 @@ def test_old_bridge_without_capabilities_still_reports_status():
     with pytest.raises(BridgeError, match="view.capture.v1") as caught:
         BridgeClient._check_method_capability("capture_view", hello)
     assert caught.value.category == "unsupported_operation"
+    BridgeClient._check_method_capability("homecad_status", {"capabilities": "malformed"})
+
+
+@pytest.mark.asyncio
+async def test_old_bridge_status_works_without_capabilities_over_transport():
+    methods = []
+
+    async def handler(reader, writer):
+        await read_request(reader)
+        await send_response(writer, response(1, result={
+            "protocol_version": 1, "ruby_extension_version": "0.2.1"}))
+        try:
+            request = await read_request(reader)
+        except asyncio.IncompleteReadError:
+            writer.close()
+            return
+        methods.append(request["method"])
+        await send_response(writer, response(2, result={"connection_status": "connected"}))
+        writer.close()
+
+    server, port = await fake_bridge(handler)
+    try:
+        client = BridgeClient(Config(port=port))
+        assert await client.call("homecad_status") == {"connection_status": "connected"}
+        with pytest.raises(BridgeError) as unsupported:
+            await client.call("capture_view")
+        assert unsupported.value.category == "unsupported_operation"
+        assert methods == ["homecad_status"]
+    finally:
+        server.close()
+        await server.wait_closed()
 
 
 def test_capability_list_may_be_empty_or_missing_but_must_be_well_formed():

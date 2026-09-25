@@ -19,7 +19,8 @@ module HomeCAD
         { 'wall_id' => placement['wall_id'] } : {}
       entity.set_attribute(Metadata::DICTIONARY, PARAMS_KEY, JSON.generate(canonical(params)))
       entity.set_attribute(Metadata::DICTIONARY, RELATIONSHIPS_KEY, JSON.generate(canonical(relationships)))
-      WallAttachment.sync!(entity, params)
+      WallAttachment.sync!(entity, placement: placement,
+        span_u_mm: params['width_mm'], span_z_mm: params['height_mm'])
       true
     end
 

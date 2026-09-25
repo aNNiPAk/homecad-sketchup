@@ -4,27 +4,35 @@ module HomeCAD
     MARKER_KEY = 'wall_attachment_schema_version'.freeze
     OWNED_KEYS = %w[
       wall_attachment_schema_version attachment_offset_mm attachment_bottom_mm
-      attachment_side attachment_clearance_mm attachment_span_u_mm wall_id
+      attachment_side attachment_clearance_mm attachment_span_u_mm
+      attachment_span_z_mm wall_id
     ].freeze
     SIDES = %w[positive_v negative_v].freeze
     TOLERANCE_MM = 0.01
 
-    # The parameter JSON is canonical. These HomeCAD attributes are a searchable
-    # projection for dependency scans and never own an independent span value.
-    def self.sync!(entity, params)
-      placement = params['placement']
+    # Domain parameter storage is canonical. This helper only persists and reads
+    # its generic searchable host projection.
+    def self.sync!(entity, placement:, span_u_mm: nil, span_z_mm: nil)
       unless placement.is_a?(Hash) && placement['mode'] == 'wall'
         clear!(entity)
         return nil
       end
 
+      projection = {
+        'wall_id' => placement['wall_id'], 'offset_mm' => placement['offset_mm'],
+        'bottom_mm' => placement['bottom_mm'], 'side' => placement['side'],
+        'clearance_mm' => placement['clearance_mm'], 'span_u_mm' => span_u_mm,
+        'span_z_mm' => span_z_mm
+      }
+      validate_projection!(projection)
       entity.set_attribute(Metadata::DICTIONARY, MARKER_KEY, SCHEMA_VERSION)
-      entity.set_attribute(Metadata::DICTIONARY, 'wall_id', placement['wall_id'])
-      entity.set_attribute(Metadata::DICTIONARY, 'attachment_offset_mm', placement['offset_mm'])
-      entity.set_attribute(Metadata::DICTIONARY, 'attachment_bottom_mm', placement['bottom_mm'])
-      entity.set_attribute(Metadata::DICTIONARY, 'attachment_side', placement['side'])
-      entity.set_attribute(Metadata::DICTIONARY, 'attachment_clearance_mm', placement['clearance_mm'])
-      entity.set_attribute(Metadata::DICTIONARY, 'attachment_span_u_mm', params['width_mm'])
+      entity.set_attribute(Metadata::DICTIONARY, 'wall_id', projection['wall_id'])
+      entity.set_attribute(Metadata::DICTIONARY, 'attachment_offset_mm', projection['offset_mm'])
+      entity.set_attribute(Metadata::DICTIONARY, 'attachment_bottom_mm', projection['bottom_mm'])
+      entity.set_attribute(Metadata::DICTIONARY, 'attachment_side', projection['side'])
+      entity.set_attribute(Metadata::DICTIONARY, 'attachment_clearance_mm', projection['clearance_mm'])
+      entity.set_attribute(Metadata::DICTIONARY, 'attachment_span_u_mm', projection['span_u_mm'])
+      entity.set_attribute(Metadata::DICTIONARY, 'attachment_span_z_mm', projection['span_z_mm'])
       read(entity)
     end
 
@@ -48,17 +56,24 @@ module HomeCAD
         'bottom_mm' => metadata['attachment_bottom_mm'],
         'side' => metadata['attachment_side'],
         'clearance_mm' => metadata['attachment_clearance_mm'],
-        'span_u_mm' => metadata['attachment_span_u_mm']
+        'span_u_mm' => metadata['attachment_span_u_mm'],
+        'span_z_mm' => metadata['attachment_span_z_mm']
       }
-      # Keep field validation explicit; a damaged mirror is rejected rather than guessed.
-      numbers = %w[offset_mm bottom_mm clearance_mm span_u_mm].map { |key| state[key] }
+      validate_projection!(state, stored: true)
+      state
+    end
+
+    def self.validate_projection!(state, stored: false)
+      numbers = %w[offset_mm bottom_mm clearance_mm span_u_mm span_z_mm].map { |key| state[key] }
       valid = state['wall_id'].is_a?(String) && !state['wall_id'].empty? &&
               numbers.all? { |value| value.is_a?(Numeric) && value.finite? } &&
-              SIDES.include?(state['side'])
-      unless valid
-        raise Runtime::BridgeError.new(-32603, 'invalid_response', 'stored WallAttachment metadata is malformed')
-      end
-      state
+              state['span_u_mm'].positive? && state['span_z_mm'].positive? && SIDES.include?(state['side'])
+      return true if valid
+
+      category = stored ? 'invalid_response' : 'invalid_request'
+      code = stored ? -32603 : -32602
+      raise Runtime::BridgeError.new(code, category,
+        stored ? 'stored WallAttachment metadata is malformed' : 'WallAttachment projection is malformed')
     end
 
     def self.dependents_for(model, wall_id)
@@ -68,23 +83,22 @@ module HomeCAD
       end
     end
 
-    def self.validate_fit!(attachment, wall_frame, wall_height_mm: nil, object_height_mm: nil)
+    def self.validate_fit!(attachment, wall_frame, wall_height_mm:)
       offset = attachment['offset_mm']
       span = attachment['span_u_mm']
       if offset < -TOLERANCE_MM || span <= 0 || offset + span > wall_frame.length_mm + TOLERANCE_MM
         raise Runtime::BridgeError.new(-32008, 'constraint_violation',
                                        'wall-attached object must fit within the proposed wall length')
       end
-      if wall_height_mm && object_height_mm &&
-         (attachment['bottom_mm'] < -TOLERANCE_MM || attachment['bottom_mm'] + object_height_mm > wall_height_mm + TOLERANCE_MM)
+      if attachment['bottom_mm'] < -TOLERANCE_MM || attachment['bottom_mm'] + attachment['span_z_mm'] > wall_height_mm + TOLERANCE_MM
         raise Runtime::BridgeError.new(-32008, 'constraint_violation',
                                        'wall-attached object must fit within the proposed wall height')
       end
       true
     end
 
-    def self.wall_transform(wall_frame, wall_thickness_mm, attachment, wall_height_mm: nil, object_height_mm: nil)
-      validate_fit!(attachment, wall_frame, wall_height_mm: wall_height_mm, object_height_mm: object_height_mm)
+    def self.wall_transform(wall_frame, wall_thickness_mm, attachment, wall_height_mm:)
+      validate_fit!(attachment, wall_frame, wall_height_mm: wall_height_mm)
       half = wall_thickness_mm.to_f / 2.0
       positive = attachment['side'] == 'positive_v'
       u = attachment['offset_mm'] + (positive ? 0.0 : attachment['span_u_mm'])
@@ -109,12 +123,8 @@ module HomeCAD
           raise Runtime::BridgeError.new(-32008, 'constraint_violation', 'locked wall-attached objects cannot be relocated')
         end
         attachment = read(entity)
-        cabinet = FurnitureData.read_params(entity)
-        unless cabinet['height_mm'].is_a?(Numeric) && cabinet['height_mm'].finite?
-          raise Runtime::BridgeError.new(-32603, 'invalid_response', 'wall-attached Furniture height metadata is malformed')
-        end
         transform = wall_transform(frame, wall['thickness_mm'], attachment,
-                                   wall_height_mm: wall['height_mm'], object_height_mm: cabinet['height_mm'])
+                                   wall_height_mm: wall['height_mm'])
         next if transformations_equal?(entity.transformation, transform)
 
         [entity, transform]

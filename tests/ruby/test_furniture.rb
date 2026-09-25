@@ -154,6 +154,9 @@ class FurnitureTest < Minitest::Test
     assert_equal children, cabinet.entities.map(&:object_id)
     assert_equal 2, HomeCAD::Metadata.read(cabinet)['revision']
     assert_equal 2, result['revision']
+    HomeCAD::WallAttachment::OWNED_KEYS.each do |key|
+      refute HomeCAD::Metadata.read(cabinet).key?(key), "expected attachment key #{key} to be cleared"
+    end
     HomeCAD::Architecture.delete_object(@model, 'target' => { 'homecad_id' => wall_id }, 'cascade' => false)
   end
 
@@ -198,6 +201,70 @@ class FurnitureTest < Minitest::Test
     assert_equal 1, result['revision']
     assert_equal before_operations, @model.events.count { |event| event.first == :start }
     assert_equal children, cabinet.entities.map(&:object_id)
+  end
+
+  def test_wall_attachment_projection_is_complete_and_negative_side_frame_is_right_handed
+    wall_id = create_wall
+    created = HomeCAD::Furniture.create_cabinet(@model, 'width_mm' => 600, 'depth_mm' => 560,
+      'height_mm' => 720, 'placement' => { 'mode' => 'wall', 'wall_id' => wall_id,
+      'offset_mm' => 1000, 'bottom_mm' => 0, 'side' => 'negative_v', 'clearance_mm' => 10 })
+    cabinet_id = created.dig('created', 0, 'identity', 'homecad_id')
+    cabinet = @model.entities.find { |entity| HomeCAD::Metadata.read(entity)['homecad_id'] == cabinet_id }
+    assert_equal({ 'wall_id' => wall_id, 'offset_mm' => 1000.0, 'bottom_mm' => 0.0,
+      'side' => 'negative_v', 'clearance_mm' => 10.0, 'span_u_mm' => 600.0, 'span_z_mm' => 720.0 },
+      HomeCAD::WallAttachment.read(cabinet))
+    frame = HomeCAD::Furniture.get_frame(@model, 'target' => { 'homecad_id' => cabinet_id })
+    assert_equal [1600.0, -70.0, 0.0], frame['origin_mm']
+    assert_equal [-1.0, 0.0, 0.0], frame['x_axis']
+    assert_equal [0.0, -1.0, 0.0], frame['y_axis']
+    assert_equal [0.0, 0.0, 1.0], cross(frame['x_axis'], frame['y_axis'])
+
+    update = HomeCAD::Architecture.update_object(@model, 'target' => { 'homecad_id' => wall_id },
+      'changes' => { 'start_mm' => [200, 100, 0], 'end_mm' => [200, 4100, 0] })
+    moved_frame = HomeCAD::Furniture.get_frame(@model, 'target' => { 'homecad_id' => cabinet_id })
+    assert_equal [270.0, 1700.0, 0.0], moved_frame['origin_mm']
+    assert_equal [0.0, -1.0, 0.0], moved_frame['x_axis']
+    assert_equal [1.0, 0.0, 0.0], moved_frame['y_axis']
+    assert_equal [0.0, 0.0, 1.0], cross(moved_frame['x_axis'], moved_frame['y_axis'])
+    assert_equal 2, HomeCAD::Metadata.read(cabinet)['revision']
+    assert update['updated'].any? { |entry| entry.dig('identity', 'homecad_id') == cabinet_id }
+  end
+
+  def test_wall_attachment_relocation_uses_generic_projection_without_furniture_parameters
+    wall_id = create_wall
+    entity = @model.entities.add_group
+    HomeCAD::Metadata.create!(entity, type: 'electrical.outlet')
+    HomeCAD::WallAttachment.sync!(entity,
+      placement: { 'mode' => 'wall', 'wall_id' => wall_id, 'offset_mm' => 25,
+        'bottom_mm' => 50, 'side' => 'positive_v', 'clearance_mm' => 0 },
+      span_u_mm: 100, span_z_mm: 100)
+    projection = HomeCAD::WallAttachment.read(entity)
+    assert_equal 100.0, projection['span_u_mm']
+    assert_equal 100.0, projection['span_z_mm']
+
+    _wall, wall_params, = HomeCAD::Architecture.wall_entity!(@model, { 'homecad_id' => wall_id })
+    proposed = wall_params.merge('start_mm' => [500, 0, 0], 'end_mm' => [4500, 0, 0])
+    relocation = HomeCAD::WallAttachment.plan_relocation(@model, wall_id, proposed)
+    assert_equal [entity], relocation.map(&:first)
+  end
+
+  def test_wall_attachment_rejects_invalid_spans_and_malformed_stored_projection
+    wall_id = create_wall
+    entity = @model.entities.add_group
+    HomeCAD::Metadata.create!(entity, type: 'furniture.cabinet')
+    placement = { 'mode' => 'wall', 'wall_id' => wall_id, 'offset_mm' => 0,
+      'bottom_mm' => 0, 'side' => 'positive_v', 'clearance_mm' => 0 }
+    [0, -1, Float::INFINITY].each do |span|
+      assert_raises(HomeCAD::Runtime::BridgeError) do
+        HomeCAD::WallAttachment.sync!(entity, placement: placement, span_u_mm: span, span_z_mm: 100)
+      end
+      assert_raises(HomeCAD::Runtime::BridgeError) do
+        HomeCAD::WallAttachment.sync!(entity, placement: placement, span_u_mm: 100, span_z_mm: span)
+      end
+    end
+    HomeCAD::WallAttachment.sync!(entity, placement: placement, span_u_mm: 100, span_z_mm: 100)
+    entity.set_attribute(HomeCAD::Metadata::DICTIONARY, 'attachment_span_z_mm', nil)
+    assert_raises(HomeCAD::Runtime::BridgeError) { HomeCAD::WallAttachment.read(entity) }
   end
 
   def test_wall_shorten_and_height_rejections_are_preflighted
@@ -253,5 +320,11 @@ class FurnitureTest < Minitest::Test
     result = HomeCAD::Architecture.delete_object(@model, 'target' => { 'homecad_id' => wall_id }, 'cascade' => true)
     assert result['deleted'].any? { |entry| entry.dig('identity', 'homecad_id') == cabinet_id }
     assert_nil @model.entities.find { |entity| HomeCAD::Metadata.read(entity)['homecad_id'] == cabinet_id }
+  end
+
+  def cross(left, right)
+    [left[1] * right[2] - left[2] * right[1],
+     left[2] * right[0] - left[0] * right[2],
+     left[0] * right[1] - left[1] * right[0]]
   end
 end

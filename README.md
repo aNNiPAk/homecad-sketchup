@@ -61,6 +61,7 @@ The bridge binds only `127.0.0.1`, uses a 16 MiB frame cap for screenshots, and 
 ## Tests
 
 ```powershell
+uv sync --project mcp --extra dev
 uv run --project mcp --extra dev python -m pytest tests/python -q
 ruby tests/ruby/test_m0.rb
 ruby tests/ruby/test_targeting.rb
@@ -69,6 +70,7 @@ ruby tests/ruby/test_inspection.rb
 ruby tests/ruby/test_measurement.rb
 ruby tests/ruby/test_capture.rb
 ruby tests/ruby/test_undo.rb
+uv run --project mcp python scripts/build_rbz.py
 ```
 
-The Python suite includes a Python-to-Ruby bridge fixture and an MCP stdio test with image content. Ruby tests use SketchUp API stand-ins. The real SketchUp smoke test above is still required after installing the RBZ.
+The [GitHub Actions workflow](.github/workflows/ci.yml) runs these Python, Ruby, and RBZ packaging checks on pushes and pull requests; it does not require SketchUp. The Python suite includes a Python-to-Ruby bridge fixture and an MCP stdio test with image content. Ruby tests use SketchUp API stand-ins. The real SketchUp smoke test above remains a manual check after installing the RBZ.

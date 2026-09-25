@@ -17,6 +17,8 @@ Keep protocol version 1 and add a `capabilities` string array to the Ruby `hello
 - `view.capture.v1`
 - `scene.undo.v1`
 
+The method mapping is `model.info.v1` → `get_model_info`; `scene.inspect.v1` → `list_objects`, `find_objects`, `get_object`, `get_selection`; `scene.measure.v1` → `measure`; `view.capture.v1` → `capture_view`; `scene.undo.v1` → `undo`. `homecad_status` remains a baseline method without a capability requirement.
+
 Python maps each method to its required capability and checks the `hello` result before sending the method request. A missing capability returns `unsupported_operation`; a present but malformed capability field returns `invalid_response`. Unknown extra capability strings are ignored. The baseline `homecad_status` operation requires no capability, so it remains usable with an otherwise protocol- and major-version-compatible older bridge. Ruby also includes capabilities in its status payload for inspection.
 
 The field is additive, so the existing length-prefixed JSON transport and protocol version do not change. An older Ruby bridge that omits `capabilities` is treated as advertising no optional features.

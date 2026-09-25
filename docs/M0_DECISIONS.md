@@ -15,7 +15,9 @@ Bind only `127.0.0.1`. Port defaults to `37941` on both sides and can be changed
 
 `hello` sends `protocol_version: 1` and `client_version: 0.1.0`. Ruby rejects a different protocol or client major version. Python independently rejects a different protocol or Ruby extension major version. Minor and patch releases within the same major version are compatible until a breaking protocol revision is needed. An absent SketchUp server is `connection_error`; a mismatched version is `incompatible_version`. No automatic retry is made after a request is sent.
 
-`homecad_status` returns MCP version, Ruby extension version, SketchUp version, model name, connection status and protocol version. `get_model_info` returns model name, file title/path, model GUID, modified flag and counts for root entities, active entities and selection. An unsaved unnamed model is named `(Untitled)`; its path is `null`. Entity counts are scoped to the named collections, not recursive totals.
+As of 0.3.0, the protocol-version-1 `hello` result additively includes a `capabilities` array. Python uses these versioned feature names for per-method compatibility; an older compatible bridge may omit the field, and `homecad_status` remains available without any feature capability. This does not change the framing, request sequence, or protocol version.
+
+`homecad_status` returns MCP version, Ruby extension version, advertised capabilities, SketchUp version, model name, connection status and protocol version. `get_model_info` returns model name, file title/path, model GUID, modified flag and counts for root entities, active entities and selection. An unsaved unnamed model is named `(Untitled)`; its path is `null`. Entity counts are scoped to the named collections, not recursive totals.
 
 ## References reviewed
 

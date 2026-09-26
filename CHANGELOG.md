@@ -32,6 +32,7 @@
 
 ### Fixed
 
+- M4 smoke screenshots now face the attached Cabinet from its wall side, keeping the cabinet visible instead of the host Wall obscuring it.
 - M4 Furniture revisions now track canonical parameter changes, generic WallAttachment projections cover horizontal and vertical fit spans, Cabinet LOD/zero-back behavior is hardened, and concept fronts no longer overlap the case envelope face.
 - Cabinet part extrusion now follows positive world Z regardless of face normal; right-side placement remains in millimeters without double conversion.
 - Empty semantic hosted objects now retain stable SketchUp identity with a hidden construction-point anchor, and anchors follow wall regeneration.

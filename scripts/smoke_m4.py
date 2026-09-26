@@ -70,8 +70,8 @@ async def run(output: Path) -> None:
                 value, _ = await call("get_object", {"target": {"homecad_id": identifier}})
                 return value
 
-            async def capture(identifier: str, label: str) -> None:
-                result, content = await call("capture_view", {"view": "iso", "target": {"homecad_id": identifier},
+            async def capture(identifier: str, label: str, view_name: str) -> None:
+                result, content = await call("capture_view", {"view": view_name, "target": {"homecad_id": identifier},
                     "max_size": 1000, "restore_camera": True})
                 if result.get("camera_restored") is not True:
                     raise SmokeError(f"capture_view did not restore the camera for {label}")
@@ -150,7 +150,7 @@ async def run(output: Path) -> None:
                 construction_ids = await child_ids(cabinet_id)
                 if len(construction_ids) != 7:
                     raise SmokeError(f"expected 7 construction part Groups, got {len(construction_ids)}")
-                await capture(cabinet_id, "construction")
+                await capture(cabinet_id, "construction", "back")
 
                 concept, _ = await call("update_furniture_object", {"target": {"homecad_id": cabinet_id},
                     "changes": {"detail_level": "concept"}})
@@ -163,7 +163,7 @@ async def run(output: Path) -> None:
                 concept_schedule, _ = await call("list_furniture_parts", {"target": {"homecad_id": cabinet_id}})
                 if concept_frame != frame or [part["part_key"] for part in concept_schedule["parts"]] != part_keys:
                     raise SmokeError("concept LOD changed the case frame or logical part schedule")
-                await capture(cabinet_id, "concept")
+                await capture(cabinet_id, "concept", "back")
                 await undo_one()
                 restored_lod = await get(cabinet_id)
                 if restored_lod["metadata"]["revision"] != 1 or restored_lod["children"].get("by_type") != {"Group": 7}:
@@ -183,7 +183,7 @@ async def run(output: Path) -> None:
                 if any(abs(negative_bbox.get(axis, float("inf")) - value) > 1
                        for axis, value in {"width": 600, "depth": 560, "height": 720}.items()):
                     raise SmokeError(f"negative_v Cabinet world bounds are incorrect: {negative_bbox}")
-                await capture(negative_id, "negative-v")
+                await capture(negative_id, "negative-v", "front")
 
                 wall_update, _ = await call("update_architecture_object", {"target": {"homecad_id": wall_id},
                     "changes": {"start_mm": [200, 100, 0], "end_mm": [200, 4100, 0]}})

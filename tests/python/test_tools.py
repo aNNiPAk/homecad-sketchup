@@ -6,7 +6,9 @@ from homecad_mcp.server import (boolean_operation, capture_view, create_box, fin
                                 create_wall, detect_rooms, get_model_info, homecad_status,
                                 mcp, push_pull, update_architecture_object, create_cabinet,
                                 get_furniture_frame, list_furniture_parts,
-                                update_furniture_object, delete_furniture_object)
+                                update_furniture_object, delete_furniture_object,
+                                plan_kitchen_run, apply_kitchen_run, validate_kitchen,
+                                update_kitchen_run, delete_kitchen_run)
 
 
 @pytest.mark.asyncio
@@ -22,7 +24,9 @@ async def test_mcp_tools_expose_mutation_schemas_and_annotations():
                      "create_niche", "create_column", "update_architecture_object",
                      "delete_architecture_object", "create_room", "detect_rooms",
                      "get_furniture_frame", "list_furniture_parts", "create_cabinet",
-                     "update_furniture_object", "delete_furniture_object"}
+                     "update_furniture_object", "delete_furniture_object",
+                     "plan_kitchen_run", "apply_kitchen_run", "validate_kitchen",
+                     "update_kitchen_run", "delete_kitchen_run"}
     read_only = {"homecad_status", "get_model_info", "list_objects", "find_objects",
                  "get_object", "get_selection", "measure", "capture_view"}
     for name in read_only:
@@ -30,7 +34,7 @@ async def test_mcp_tools_expose_mutation_schemas_and_annotations():
         assert tools[name].annotations.openWorldHint is False
     for name in {"get_wall_frame", "detect_rooms"}:
         assert tools[name].annotations.readOnlyHint is True
-    for name in {"get_furniture_frame", "list_furniture_parts"}:
+    for name in {"get_furniture_frame", "list_furniture_parts", "plan_kitchen_run", "validate_kitchen"}:
         assert tools[name].annotations.readOnlyHint is True
     create_tools = {"create_group", "create_face", "create_edge", "create_box", "create_circle",
                     "create_arc", "create_polygon", "boolean_operation"}
@@ -46,7 +50,7 @@ async def test_mcp_tools_expose_mutation_schemas_and_annotations():
         assert tools[name].annotations.destructiveHint is False
         assert tools[name].annotations.idempotentHint is False
         assert tools[name].annotations.openWorldHint is False
-    for name in {"create_cabinet"}:
+    for name in {"create_cabinet", "apply_kitchen_run"}:
         assert tools[name].annotations.readOnlyHint is False
         assert tools[name].annotations.destructiveHint is False
         assert tools[name].annotations.idempotentHint is False
@@ -55,7 +59,8 @@ async def test_mcp_tools_expose_mutation_schemas_and_annotations():
         assert tools[name].annotations.destructiveHint is True
         assert tools[name].annotations.idempotentHint is False
         assert tools[name].annotations.openWorldHint is False
-    for name in {"update_furniture_object", "delete_furniture_object"}:
+    for name in {"update_furniture_object", "delete_furniture_object",
+                 "update_kitchen_run", "delete_kitchen_run"}:
         assert tools[name].annotations.readOnlyHint is False
         assert tools[name].annotations.destructiveHint is True
         assert tools[name].annotations.idempotentHint is False
@@ -74,6 +79,8 @@ async def test_mcp_tools_expose_mutation_schemas_and_annotations():
     assert "start_mm" in tools["create_wall"].inputSchema["properties"]
     assert "wall_ids" in tools["create_room"].inputSchema["properties"]
     assert "width_mm" in tools["create_cabinet"].inputSchema["properties"]
+    assert "modules" in tools["plan_kitchen_run"].inputSchema["properties"]
+    assert "plan" in tools["apply_kitchen_run"].inputSchema["properties"]
 
 
 @pytest.mark.asyncio
@@ -218,3 +225,38 @@ def test_furniture_methods_require_advertised_capability():
         "protocol_version": 1, "ruby_extension_version": "0.6.1",
         "capabilities": ["furniture.core.v1", "unknown.future.capability.v9"],
     })
+
+
+def test_kitchen_methods_require_capability():
+    with pytest.raises(BridgeError) as missing:
+        BridgeClient._check_method_capability("plan_kitchen_run", {
+            "protocol_version": 1, "ruby_extension_version": "0.6.1",
+            "capabilities": ["furniture.core.v1"],
+        })
+    assert missing.value.category == "unsupported_operation"
+    BridgeClient._check_method_capability("apply_kitchen_run", {
+        "protocol_version": 1, "ruby_extension_version": "0.7.0",
+        "capabilities": ["kitchen.run.v1", "unknown.future.capability.v9"],
+    })
+
+
+@pytest.mark.asyncio
+async def test_kitchen_tools_forward_plan_and_mutation(monkeypatch):
+    calls = []
+    async def fake(method, params):
+        calls.append((method, params))
+        return {"status": "success", "operation": method}
+
+    monkeypatch.setattr("homecad_mcp.server._scene_call", fake)
+    modules = [{"key": "sink", "type": "sink", "width_mm": 600}]
+    wall = {"homecad_id": "wall"}
+    await plan_kitchen_run(wall, 0, 600, "positive_v", modules)
+    await apply_kitchen_run({"fingerprint": "plan"})
+    await validate_kitchen({"homecad_id": "run"})
+    await update_kitchen_run({"homecad_id": "run"}, {"name": "New"})
+    await delete_kitchen_run({"homecad_id": "run"})
+    assert [item[0] for item in calls] == ["plan_kitchen_run", "apply_kitchen_run",
+                                                "validate_kitchen", "update_kitchen_run",
+                                                "delete_kitchen_run"]
+    assert calls[0][1]["modules"] == modules
+    assert calls[1][1] == {"plan": {"fingerprint": "plan"}}

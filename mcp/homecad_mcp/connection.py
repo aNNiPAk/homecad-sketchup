@@ -49,6 +49,11 @@ METHOD_CAPABILITIES = {
     "create_cabinet": "furniture.core.v1",
     "update_furniture_object": "furniture.core.v1",
     "delete_furniture_object": "furniture.core.v1",
+    "plan_kitchen_run": "kitchen.run.v1",
+    "apply_kitchen_run": "kitchen.run.v1",
+    "validate_kitchen": "kitchen.run.v1",
+    "update_kitchen_run": "kitchen.run.v1",
+    "delete_kitchen_run": "kitchen.run.v1",
 }
 
 
@@ -107,7 +112,9 @@ class BridgeClient:
                           "update_architecture_object", "delete_architecture_object",
                           "create_room", "detect_rooms", "get_furniture_frame",
                           "list_furniture_parts", "create_cabinet",
-                          "update_furniture_object", "delete_furniture_object"):
+                          "update_furniture_object", "delete_furniture_object",
+                          "plan_kitchen_run", "apply_kitchen_run", "validate_kitchen",
+                          "update_kitchen_run", "delete_kitchen_run"):
             raise BridgeError("unsupported_operation", f"unsupported method: {method}")
         try:
             async with asyncio.timeout(self.config.timeout):

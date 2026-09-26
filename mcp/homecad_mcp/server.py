@@ -381,6 +381,48 @@ async def delete_furniture_object(target: dict) -> dict:
     return await _scene_call("delete_furniture_object", {"target": target})
 
 
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def plan_kitchen_run(wall: dict, start_mm: float, end_mm: float,
+                           side: str, modules: list[dict], clearance_mm: float = 0,
+                           filler_max_mm: float = 150, countertop: bool | None = None,
+                           countertop_thickness_mm: float = 38,
+                           plinth: bool | None = None, name: str = "Kitchen run") -> dict:
+    """Plan ordered modules on one Wall side in millimeters without modifying SketchUp."""
+    params = {"wall": wall, "start_mm": start_mm, "end_mm": end_mm,
+              "side": side, "modules": modules, "clearance_mm": clearance_mm,
+              "filler_max_mm": filler_max_mm,
+              "countertop_thickness_mm": countertop_thickness_mm, "name": name}
+    if countertop is not None:
+        params["countertop"] = countertop
+    if plinth is not None:
+        params["plinth"] = plinth
+    return await _scene_call("plan_kitchen_run", params)
+
+
+@mcp.tool(annotations=CREATE_TOOL)
+async def apply_kitchen_run(plan: dict) -> dict:
+    """Apply a current conflict-free kitchen plan in one SketchUp Undo operation."""
+    return await _scene_call("apply_kitchen_run", {"plan": plan})
+
+
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def validate_kitchen(target: dict) -> dict:
+    """Check an existing KitchenRun against current walls, cuts and attachments."""
+    return await _scene_call("validate_kitchen", {"target": target})
+
+
+@mcp.tool(annotations=MUTATE_TOOL)
+async def update_kitchen_run(target: dict, changes: dict) -> dict:
+    """Update KitchenRun parameters and regenerate its managed child geometry."""
+    return await _scene_call("update_kitchen_run", {"target": target, "changes": changes})
+
+
+@mcp.tool(annotations=MUTATE_TOOL)
+async def delete_kitchen_run(target: dict) -> dict:
+    """Delete one managed KitchenRun and its generated children."""
+    return await _scene_call("delete_kitchen_run", {"target": target})
+
+
 def main() -> None:
     level = os.environ.get("HOMECAD_LOG_LEVEL", "INFO").upper()
     logging.basicConfig(level=getattr(logging, level, logging.INFO),

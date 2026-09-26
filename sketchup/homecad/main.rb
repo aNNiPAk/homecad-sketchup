@@ -2,7 +2,7 @@ require 'json'
 require 'socket'
 
 module HomeCAD
-  VERSION = '0.6.1'
+  VERSION = '0.7.0'
   PROTOCOL_VERSION = 1
 end
 
@@ -24,6 +24,7 @@ Sketchup.require 'homecad/core/architecture'
 Sketchup.require 'homecad/core/wall_attachment'
 Sketchup.require 'homecad/core/furniture_data'
 Sketchup.require 'homecad/core/furniture'
+Sketchup.require 'homecad/core/kitchen'
 Sketchup.require 'homecad/core/inspection'
 Sketchup.require 'homecad/core/measurement'
 Sketchup.require 'homecad/core/capture'

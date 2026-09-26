@@ -19,5 +19,6 @@ def test_rbz_contains_loader_and_matching_support_folder():
         }
         assert {f"homecad/core/{name}.rb" for name in required_core_files} <= names
         assert all(name == "homecad.rb" or name.startswith("homecad/") for name in names)
+        assert not any(name.startswith(("scripts/", ".homecad-dev/")) for name in names)
         assert f"EXTENSION.version = '{VERSION}'" in archive.read("homecad.rb").decode()
         assert f"VERSION = '{VERSION}'" in archive.read("homecad/main.rb").decode()

@@ -19,6 +19,16 @@ module Geom
       @origin, @axes = origin, [xaxis, yaxis, zaxis]
     end
     def *(point)
+      if point.is_a?(Transformation)
+        origin = self * point.instance_variable_get(:@origin)
+        axes = point.instance_variable_get(:@axes).map do |axis|
+          transformed = self * Geom::Point3d.new(axis.x, axis.y, axis.z)
+          Geom::Vector3d.new(transformed.x - @origin.x,
+                             transformed.y - @origin.y,
+                             transformed.z - @origin.z)
+        end
+        return Transformation.new(origin, *axes)
+      end
       Point3d.new(@origin.x + @axes[0].x * point.x + @axes[1].x * point.y + @axes[2].x * point.z,
                   @origin.y + @axes[0].y * point.x + @axes[1].y * point.y + @axes[2].y * point.z,
                   @origin.z + @axes[0].z * point.x + @axes[1].z * point.y + @axes[2].z * point.z)

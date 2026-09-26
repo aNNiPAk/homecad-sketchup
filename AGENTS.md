@@ -37,3 +37,12 @@ HomeCAD architecture invariants
 - Keep Cabinet dimensions in generated geometry and placement in rigid transforms; never use root scaling to represent editable Furniture dimensions.
 - WallAttachment is a derived cross-domain projection. It must not depend on FurnitureData, ArchitectureData, ElectricalData, or any single domain storage implementation.
 - A domain object's revision tracks canonical semantic state changes, not only visible geometry or transform changes.
+
+HomeCAD automated SketchUp verification
+
+- Ordinary development uses the HomeCAD dev junction; do not ask the user to reinstall the RBZ or launch SketchUp for milestone smoke tests.
+- Use `scripts/dev_verify.py`; every verification starts a fresh dedicated SketchUp process and does not use hot reload.
+- `--fast` runs the repository checkout through the junction. Milestone acceptance requires `--packaged`, which installs the freshly built RBZ and restores dev links afterward.
+- Never terminate a SketchUp process unless the harness can verify its exact owned PID, executable path, process creation time, and ownership state.
+- Destructive smoke requires both `--confirm-disposable` and the exact `HomeCADDev` smoke fixture marker. Never run it on a user model.
+- If a real SketchUp smoke fails because of HomeCAD code, fix the code and rerun it. Never claim real SketchUp verification without a successful run.

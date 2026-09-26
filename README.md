@@ -94,6 +94,28 @@ uv run --project mcp python scripts/smoke_m4.py --confirm-disposable
 
 See [the M4 contract](tests/contracts/m4.md) and [M4 decisions](docs/M4_DECISIONS.md). Standalone fakes cannot verify actual SketchUp panel topology, view framing, wall-host placement, or native Undo behavior; those require a SketchUp kernel run.
 
+## Automated SketchUp development
+
+Set up the repository-linked development extension and the dedicated disposable model once:
+
+```powershell
+uv run --project mcp python scripts/dev_setup.py
+```
+
+Daily development uses the repository junction and starts a fresh SketchUp process without reinstalling the RBZ:
+
+```powershell
+uv run --project mcp python scripts/dev_verify.py --milestone m4 --fast
+```
+
+Before accepting a milestone, run the full test suite, install the exact freshly built RBZ payload, and smoke it in a fresh SketchUp process:
+
+```powershell
+uv run --project mcp python scripts/dev_verify.py --milestone m4 --packaged
+```
+
+Both modes use only `.homecad-dev/fixture/HomeCAD-Smoke.skp`. Setup creates it through SketchUp from a writable temporary copy of SketchUp's Simple template, then verifies the new model is empty before applying its disposable marker. The harness backs up a recognized existing HomeCAD RBZ, never closes an unowned SketchUp process, and restores verified dev links after packaged verification. Screenshots are under ignored `dist/`; machine paths, process state, backups, and the binary fixture stay under ignored `.homecad-dev/`. Use `scripts/dev_teardown.py --remove-dev-links` to restore the saved production HomeCAD installation. `--fast --skip-tests` skips focused local tests, and `--fast --keep-open` leaves only the owned fresh test instance open.
+
 ## Configuration
 
 | Variable | Default | Effect |
@@ -125,4 +147,4 @@ ruby tests/ruby/test_furniture.rb
 uv run --project mcp python scripts/build_rbz.py
 ```
 
-The [GitHub Actions workflow](.github/workflows/ci.yml) runs Python, standalone Ruby, and RBZ packaging checks on pushes and pull requests; it does not require SketchUp. The Python suite includes Python-to-Ruby bridge fixtures and MCP stdio tests. Ruby tests use SketchUp API stand-ins. M1 inspection, M2 primitive, and M3 architecture smoke tests remain manual checks after installing the matching RBZ.
+The [GitHub Actions workflow](.github/workflows/ci.yml) runs Python, standalone Ruby, and RBZ packaging checks on pushes and pull requests; it does not require SketchUp. The Python suite includes Python-to-Ruby bridge fixtures and MCP stdio tests. Ruby tests use SketchUp API stand-ins. With the dev fixture configured, the harness can also run the M1–M4 real SketchUp smokes through `--milestone m1|m2|m3|m4`.

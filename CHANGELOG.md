@@ -4,6 +4,7 @@
 
 ### Added
 
+- Windows development harness with a repository junction, disposable fixture marker, exact SketchUp process ownership, and fresh-process fast/packaged verification; destructive M2–M4 smokes now refuse unmarked models.
 - M4 Furniture Core: a parametric Cabinet with concept/construction detail, shelves, configurable fronts, stable local frame, parameter-derived part schedule, and wall-local placement under `furniture.core.v1`.
 - Generic WallAttachment indexing and dependency handling; Wall updates relocate attached Cabinets after preflight, and cascaded Wall deletion returns Cabinet tombstones in the same Undo operation.
 - M4 MCP tools, cross-language Cabinet fixture coverage, explicit RBZ packaging checks, and guarded disposable-model `smoke_m4.py`.

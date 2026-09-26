@@ -100,6 +100,8 @@ M5 adds `kitchen.run.v1` and a two-phase workflow: `plan_kitchen_run` reads a Ho
 
 Each straight run has one tier: base, wall, or tall. Base modules include shelves, drawers, sink, hob, dishwasher, and oven; tall modules include storage and fridge; wall modules include shelves and lift front. Appliance and sink/hob geometry is conceptual. A base run may generate a single straight countertop, plinth, and end filler. All placement lengths are millimeters in the Wall U frame. The planner accepts separate start/end clearances and explicit coverage, countertop, opening-clearance, and depth constraints. See [the M5 contract](tests/contracts/m5.md) and [M5 decisions](docs/M5_DECISIONS.md) for module schemas and current limitations.
 
+Applied modules, appliances, filler, countertop, and plinth have their own stable HomeCAD UUIDs. `find_objects` and `get_object` can inspect them; `update_kitchen_run` regenerates them from run parameters and preserves each semantic UUID. The planner checks collisions using each part's U, height, and depth span, and reports distinct appliance and wall-cabinet conflicts. SketchUp child persistent IDs may change during regeneration.
+
 The guarded real SketchUp smoke captures a KitchenRun, checks validation and Undo cleanup, and requires the dedicated disposable fixture:
 
 ```powershell

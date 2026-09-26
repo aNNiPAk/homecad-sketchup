@@ -37,6 +37,10 @@ module HomeCAD
       elsif data['type'] == 'furniture.cabinet' && defined?(FurnitureData)
         result['parameters'] = safe_value(FurnitureData.read_params(entity))
         result['relationships'] = safe_value(FurnitureData.read_relationships(entity))
+      elsif data['type'].to_s.start_with?('kitchen.') && defined?(KitchenData)
+        result['parameters'] = safe_value(KitchenData.read(entity))
+        result['relationships'] = safe_value({ 'kitchen_run_id' => data['kitchen_run_id'],
+          'wall_id' => data['wall_id'] }.reject { |_key, value| value.nil? })
       end
       result
     end

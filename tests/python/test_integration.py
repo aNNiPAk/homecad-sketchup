@@ -248,21 +248,38 @@ async def test_m5_plan_apply_validate_cross_language():
         wall_id = wall["created"][0]["identity"]["homecad_id"]
         plan = await client.call("plan_kitchen_run", {
             "wall": {"homecad_id": wall_id}, "start_mm": 100,
-            "end_mm": 1400, "side": "negative_v", "modules": [
+            "end_mm": 1500, "start_clearance_mm": 50, "end_clearance_mm": 50,
+            "constraints": {"require_full_coverage": True},
+            "side": "negative_v", "modules": [
                 {"key": "sink", "type": "sink", "width_mm": 600},
                 {"key": "hob", "type": "hob", "width_mm": 600},
             ],
         })
         assert not plan["conflicts"]
         assert plan["filler_mm"] == 100
+        assert plan["positions"][0]["offset_mm"] == 150
         applied = await client.call("apply_kitchen_run", {"plan": plan})
         run_id = applied["created"][0]["identity"]["homecad_id"]
         assert applied["created"][0]["metadata"]["type"] == "kitchen.run"
+        module = next(item for item in applied["created"] if item["metadata"].get("module_key") == "sink")
+        module_id = module["homecad_id"]
+        assert module["homecad_type"] == "kitchen.base_cabinet"
+        nested = await client.call("get_object", {"target": {"homecad_id": module_id}})
+        assert nested["parameters"]["module_type"] == "sink"
+        assert nested["relationships"]["kitchen_run_id"] == run_id
         found = await client.call("find_objects", {"homecad_id": run_id})
         assert found["resolution"] == "unique"
         validation = await client.call("validate_kitchen", {"target": {"homecad_id": run_id}})
         assert validation["valid"] is True
         assert validation["module_count"] == 2
+        changed = await client.call("update_kitchen_run", {"target": {"homecad_id": run_id},
+            "changes": {"modules": [
+                {"key": "sink", "type": "sink", "width_mm": 600},
+                {"key": "hob", "type": "hob", "width_mm": 650},
+            ]}})
+        assert changed["revision"] == 2
+        module_after = await client.call("get_object", {"target": {"homecad_id": module_id}})
+        assert module_after["metadata"]["revision"] == 1
     finally:
         process.terminate()
         await process.wait()

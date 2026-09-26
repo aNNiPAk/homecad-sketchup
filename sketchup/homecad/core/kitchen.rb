@@ -1,5 +1,6 @@
 require 'json'
 require 'digest'
+require 'securerandom'
 
 module HomeCAD
   module KitchenData
@@ -27,6 +28,18 @@ module HomeCAD
       }, span_u_mm: params['span_mm'], span_z_mm: params['top_mm'])
     end
 
+    def self.write_child(entity, record:, descriptor:, run_id:, wall_id:)
+      Metadata.write(entity, type: descriptor['type'], generated: true,
+        homecad_id: record['homecad_id'], revision: record['revision'])
+      entity.set_attribute(Metadata::DICTIONARY, KEY, JSON.generate(canonical(descriptor['params'])))
+      entity.set_attribute(Metadata::DICTIONARY, 'kitchen_run_id', run_id)
+      entity.set_attribute(Metadata::DICTIONARY, 'wall_id', wall_id)
+      if descriptor['params']['module_key']
+        entity.set_attribute(Metadata::DICTIONARY, 'module_key', descriptor['params']['module_key'])
+        entity.set_attribute(Metadata::DICTIONARY, 'module_type', descriptor['params']['module_type'])
+      end
+    end
+
     def self.canonical(value)
       case value
       when Hash then value.keys.sort.to_h { |key| [key.to_s, canonical(value[key])] }
@@ -46,6 +59,7 @@ module HomeCAD
       'wall_shelves' => 'wall', 'wall_lift_front' => 'wall',
       'tall_storage' => 'tall', 'fridge' => 'tall'
     }.freeze
+    APPLIANCE_TYPES = %w[hob dishwasher oven fridge].freeze
     DEFAULTS = {
       'base' => [560.0, 720.0, 100.0],
       'wall' => [350.0, 720.0, 1400.0],
@@ -174,7 +188,7 @@ module HomeCAD
         'filler_max_mm' => filler_max, 'countertop' => countertop,
         'countertop_thickness_mm' => countertop_thickness, 'plinth' => plinth,
         'name' => name, 'tier' => tier, 'span_mm' => span, 'top_mm' => top }
-      conflicts.concat(scene_conflicts(model, canonical, positions, exclude_id: exclude_id))
+      conflicts.concat(scene_conflicts(model, canonical, exclude_id: exclude_id))
       warnings = []
       warnings << 'remaining wall space is unallocated' if remaining > filler_max + TOLERANCE_MM
       warnings << 'base run has no countertop' if tier == 'base' && !countertop
@@ -185,19 +199,10 @@ module HomeCAD
       result
     end
 
-    def self.scene_conflicts(model, params, positions, exclude_id: nil)
+    def self.scene_conflicts(model, params, exclude_id: nil)
       wall_id = params['wall_id']; side = params['side']
       conflicts = []
-      occupied = positions.map do |position|
-        position.merge('height_mm' => position['height_mm'] +
-          (params['countertop'] ? params['countertop_thickness_mm'] : 0.0))
-      end
-      filler_start = params['run_start_mm'] + positions.sum { |position| position['width_mm'] }
-      filler_width = params['span_mm'] - positions.sum { |position| position['width_mm'] }
-      if filler_width > TOLERANCE_MM
-        occupied << { 'key' => 'filler', 'offset_mm' => filler_start,
-          'width_mm' => filler_width, 'bottom_mm' => 0.0, 'height_mm' => params['top_mm'] }
-      end
+      occupied = occupied_rectangles(params)
       Architecture.hosted_for(model, wall_id).each do |entity|
         metadata = Metadata.read(entity)
         next unless Architecture::HOSTED_TYPES.include?(metadata['type'])
@@ -210,7 +215,7 @@ module HomeCAD
           next if metadata['type'] == 'architecture.niche' && cut['side'] != side
 
           conflicts << conflict('wall_cut_collision', "module #{position['key']} overlaps #{metadata['type']}",
-                                position['key'], metadata['homecad_id'])
+                                position['key'], metadata['homecad_id'], metadata['type'])
         end
       end
       WallAttachment.dependents_for(model, wall_id).each do |entity|
@@ -218,9 +223,32 @@ module HomeCAD
         next if data['homecad_id'] == exclude_id
         attached = WallAttachment.read(entity)
         next unless attached['side'] == side
+        if data['type'] == 'kitchen.run'
+          other = occupied_rectangles(KitchenData.read(entity))
+          occupied.each do |position|
+            other.each do |counterpart|
+              next unless rectangles_overlap?(position, counterpart)
+
+              code = if APPLIANCE_TYPES.include?(position['type']) || APPLIANCE_TYPES.include?(counterpart['type'])
+                'appliance_collision'
+              elsif position['tier'] == 'wall' || counterpart['tier'] == 'wall'
+                'wall_cabinet_collision'
+              else
+                'cabinet_collision'
+              end
+              conflicts << conflict(code, "#{position['key']} overlaps #{counterpart['key']}",
+                position['key'], data['homecad_id'], counterpart['key'])
+            end
+          end
+          next
+        end
+        other_depth = data['type'] == 'furniture.cabinet' ?
+          FurnitureData.read_params(entity)['depth_mm'] : nil
+        counterpart = { 'offset_mm' => attached['offset_mm'], 'width_mm' => attached['span_u_mm'],
+          'bottom_mm' => attached['bottom_mm'], 'height_mm' => attached['span_z_mm'],
+          'depth_offset_mm' => attached['clearance_mm'], 'depth_mm' => other_depth }
         occupied.each do |position|
-          next unless overlap?(position['offset_mm'], position['width_mm'], attached['offset_mm'], attached['span_u_mm'])
-          next unless overlap?(position['bottom_mm'], position['height_mm'], attached['bottom_mm'], attached['span_z_mm'])
+          next unless rectangles_overlap?(position, counterpart)
 
           conflicts << conflict('cabinet_collision', "module #{position['key']} overlaps a wall attachment",
                                 position['key'], data['homecad_id'])
@@ -229,13 +257,122 @@ module HomeCAD
       conflicts
     end
 
+    def self.occupied_rectangles(params)
+      cursor = params.fetch('run_start_mm', params['start_mm'])
+      clearance = params['clearance_mm']
+      occupied = params['modules'].map do |item|
+        rectangle = { 'key' => item['key'], 'type' => item['type'], 'tier' => params['tier'],
+          'offset_mm' => cursor, 'width_mm' => item['width_mm'],
+          'bottom_mm' => item['bottom_mm'], 'height_mm' => item['height_mm'],
+          'depth_offset_mm' => clearance, 'depth_mm' => item['depth_mm'] }
+        cursor += item['width_mm']
+        rectangle
+      end
+      filler_width = params['span_mm'] - params['modules'].sum { |item| item['width_mm'] }
+      max_depth = params['modules'].map { |item| item['depth_mm'] }.max
+      if filler_width > TOLERANCE_MM
+        occupied << { 'key' => 'filler', 'type' => 'filler', 'tier' => params['tier'],
+          'offset_mm' => cursor, 'width_mm' => filler_width,
+          'bottom_mm' => 0.0, 'height_mm' => params['top_mm'],
+          'depth_offset_mm' => clearance, 'depth_mm' => max_depth }
+      end
+      if params['countertop']
+        occupied << { 'key' => 'countertop', 'type' => 'countertop', 'tier' => params['tier'],
+          'offset_mm' => params.fetch('run_start_mm', params['start_mm']),
+          'width_mm' => params['span_mm'], 'bottom_mm' => params['modules'].first['bottom_mm'] + params['modules'].first['height_mm'],
+          'height_mm' => params['countertop_thickness_mm'],
+          'depth_offset_mm' => clearance, 'depth_mm' => max_depth + 20 }
+      end
+      lowest = params['modules'].map { |item| item['bottom_mm'] }.min
+      if params['plinth'] && lowest > TOLERANCE_MM
+        occupied << { 'key' => 'plinth', 'type' => 'plinth', 'tier' => params['tier'],
+          'offset_mm' => params.fetch('run_start_mm', params['start_mm']),
+          'width_mm' => params['span_mm'], 'bottom_mm' => 0.0, 'height_mm' => lowest,
+          'depth_offset_mm' => clearance + 20, 'depth_mm' => max_depth - 40 }
+      end
+      occupied
+    end
+
+    def self.rectangles_overlap?(left, right)
+      return false unless overlap?(left['offset_mm'], left['width_mm'], right['offset_mm'], right['width_mm']) &&
+                          overlap?(left['bottom_mm'], left['height_mm'], right['bottom_mm'], right['height_mm'])
+      return true unless right['depth_mm'].is_a?(Numeric)
+
+      overlap?(left['depth_offset_mm'], left['depth_mm'], right['depth_offset_mm'], right['depth_mm'])
+    end
+
     def self.overlap?(a, aw, b, bw)
       a.is_a?(Numeric) && aw.is_a?(Numeric) && b.is_a?(Numeric) && bw.is_a?(Numeric) &&
         [a, b].max < [a + aw, b + bw].min - TOLERANCE_MM
     end
 
-    def self.conflict(code, message, module_key = nil, object_id = nil)
-      { 'code' => code, 'message' => message, 'module_key' => module_key, 'object_id' => object_id }
+    def self.conflict(code, message, module_key = nil, object_id = nil, other = nil)
+      { 'code' => code, 'message' => message, 'module_key' => module_key,
+        'object_id' => object_id, 'other' => other }
+    end
+
+    # Object keys are canonical across geometry regeneration. SketchUp child
+    # persistent IDs can change, while these HomeCAD UUIDs survive updates.
+    def self.object_descriptors(values)
+      wall_id = values['wall_id']
+      side = values['side']
+      cursor = values.fetch('run_start_mm', values['start_mm'])
+      descriptors = {}
+      values['modules'].each do |item|
+        key = "module:#{item['key']}"
+        type = if APPLIANCE_TYPES.include?(item['type'])
+          'kitchen.appliance'
+        else
+          "kitchen.#{values['tier']}_cabinet"
+        end
+        descriptors[key] = { 'type' => type, 'params' => item.merge(
+          'module_key' => item['key'], 'module_type' => item['type'],
+          'offset_mm' => cursor, 'wall_id' => wall_id, 'side' => side) }
+        cursor += item['width_mm']
+      end
+      filler_width = values['span_mm'] - values['modules'].sum { |item| item['width_mm'] }
+      if filler_width > TOLERANCE_MM
+        descriptors['filler'] = { 'type' => 'kitchen.filler', 'params' => {
+          'wall_id' => wall_id, 'side' => side, 'offset_mm' => cursor,
+          'width_mm' => filler_width, 'height_mm' => values['top_mm'],
+          'depth_mm' => values['modules'].map { |item| item['depth_mm'] }.max } }
+      end
+      if values['countertop']
+        descriptors['countertop'] = { 'type' => 'kitchen.countertop', 'params' => {
+          'wall_id' => wall_id, 'side' => side,
+          'offset_mm' => values.fetch('run_start_mm', values['start_mm']),
+          'width_mm' => values['span_mm'],
+          'depth_mm' => values['modules'].map { |item| item['depth_mm'] }.max + 20,
+          'bottom_mm' => values['modules'].first['bottom_mm'] + values['modules'].first['height_mm'],
+          'height_mm' => values['countertop_thickness_mm'] } }
+      end
+      lowest = values['modules'].map { |item| item['bottom_mm'] }.min
+      if values['plinth'] && lowest > TOLERANCE_MM
+        descriptors['plinth'] = { 'type' => 'kitchen.plinth', 'params' => {
+          'wall_id' => wall_id, 'side' => side,
+          'offset_mm' => values.fetch('run_start_mm', values['start_mm']),
+          'width_mm' => values['span_mm'],
+          'depth_mm' => values['modules'].map { |item| item['depth_mm'] }.max - 40,
+          'height_mm' => lowest } }
+      end
+      descriptors
+    end
+
+    def self.assign_semantic_objects!(values, previous = nil)
+      prior_records = previous.is_a?(Hash) ? previous.fetch('semantic_objects', {}) : {}
+      prior_descriptors = previous.is_a?(Hash) ? object_descriptors(previous) : {}
+      values['semantic_objects'] = object_descriptors(values).to_h do |key, descriptor|
+        prior = prior_records[key]
+        if prior.is_a?(Hash) && Metadata.uuid?(prior['homecad_id']) &&
+           prior['revision'].is_a?(Integer) && prior['revision'].positive?
+          changed = KitchenData.canonical(prior_descriptors[key]) != KitchenData.canonical(descriptor)
+          [key, { 'homecad_id' => prior['homecad_id'],
+                  'revision' => prior['revision'] + (changed ? 1 : 0) }]
+        else
+          [key, { 'homecad_id' => SecureRandom.uuid, 'revision' => 1 }]
+        end
+      end
+      values
     end
 
     def self.apply(model, request)
@@ -248,6 +385,7 @@ module HomeCAD
       values = fresh['params']
       wall, = Architecture.wall_entity!(model, { 'homecad_id' => values['wall_id'] })
       Architecture.require_mutable!(wall)
+      assign_semantic_objects!(values)
       Operation.run('Apply kitchen run', model: model) do
         root = model.entities.add_group
         Primitives.geometry_created!(root, 'SketchUp could not create KitchenRun Group')
@@ -256,7 +394,8 @@ module HomeCAD
         KitchenData.write(root, values)
         root.transformation = run_transform(model, values)
         build_geometry!(model, root, values, fresh)
-        MutationResult.success(operation: 'apply_kitchen_run', created: [serialize(root)], revision: 1)
+        MutationResult.success(operation: 'apply_kitchen_run',
+          created: [serialize(root)] + child_serializations(root), revision: 1)
       end
     rescue Runtime::BridgeError then raise
     rescue StandardError => error
@@ -277,16 +416,17 @@ module HomeCAD
     def self.build_geometry!(model, root, values, plan_data)
       root.entities.clear!
       span = values['span_mm']
+      descriptors = object_descriptors(values)
+      run_id = Metadata.read(root)['homecad_id']
       plan_data['positions'].each do |position|
         module_data = values['modules'].find { |item| item['key'] == position['key'] }
         x = values['side'] == 'positive_v' ? position['offset_mm'] - values['run_start_mm'] :
           values['run_start_mm'] + span - position['offset_mm'] - position['width_mm']
         group = root.entities.add_group
         group.name = "#{module_data['type']}:#{module_data['key']}"
-        group.set_attribute(Metadata::DICTIONARY, 'type', 'kitchen.module')
-        group.set_attribute(Metadata::DICTIONARY, 'generated', true)
-        group.set_attribute(Metadata::DICTIONARY, 'module_key', module_data['key'])
-        group.set_attribute(Metadata::DICTIONARY, 'module_type', module_data['type'])
+        key = "module:#{module_data['key']}"
+        KitchenData.write_child(group, record: values['semantic_objects'].fetch(key),
+          descriptor: descriptors.fetch(key), run_id: run_id, wall_id: values['wall_id'])
         group.transformation = Geom::Transformation.axes(
           Geometry.point_mm([x, 0.0, module_data['bottom_mm']], 'module_origin_mm'),
           Geom::Vector3d.new(1, 0, 0), Geom::Vector3d.new(0, 1, 0),
@@ -299,19 +439,27 @@ module HomeCAD
       end
       if plan_data['filler_mm'] > TOLERANCE_MM
         x = values['side'] == 'positive_v' ? span - plan_data['filler_mm'] : 0.0
-        box!(root, 'filler', x, 0, 0, plan_data['filler_mm'],
-             values['modules'].map { |item| item['depth_mm'] }.max, values['top_mm'])
+        group = box!(root, 'filler', x, 0, 0, plan_data['filler_mm'],
+                     values['modules'].map { |item| item['depth_mm'] }.max, values['top_mm'])
+        KitchenData.write_child(group, record: values['semantic_objects'].fetch('filler'),
+          descriptor: descriptors.fetch('filler'), run_id: run_id, wall_id: values['wall_id'])
       end
       if values['countertop']
         top = values['modules'].first['bottom_mm'] + values['modules'].first['height_mm']
-        box!(root, 'countertop', 0, 0, top, span,
-             values['modules'].map { |item| item['depth_mm'] }.max + 20,
-             values['countertop_thickness_mm'])
+        group = box!(root, 'countertop', 0, 0, top, span,
+                     values['modules'].map { |item| item['depth_mm'] }.max + 20,
+                     values['countertop_thickness_mm'])
+        KitchenData.write_child(group, record: values['semantic_objects'].fetch('countertop'),
+          descriptor: descriptors.fetch('countertop'), run_id: run_id, wall_id: values['wall_id'])
       end
       if values['plinth']
         lowest = values['modules'].map { |item| item['bottom_mm'] }.min
-        box!(root, 'plinth', 0, 20, 0, span,
-             values['modules'].map { |item| item['depth_mm'] }.max - 40, lowest) if lowest > TOLERANCE_MM
+        if lowest > TOLERANCE_MM
+          group = box!(root, 'plinth', 0, 20, 0, span,
+                       values['modules'].map { |item| item['depth_mm'] }.max - 40, lowest)
+          KitchenData.write_child(group, record: values['semantic_objects'].fetch('plinth'),
+            descriptor: descriptors.fetch('plinth'), run_id: run_id, wall_id: values['wall_id'])
+        end
       end
       root
     end
@@ -319,8 +467,6 @@ module HomeCAD
     def self.box!(root, kind, x, y, z, width, depth, height)
       group = root.entities.add_group
       group.name = kind
-      group.set_attribute(Metadata::DICTIONARY, 'type', "kitchen.#{kind}")
-      group.set_attribute(Metadata::DICTIONARY, 'generated', true)
       px = Units.mm_to_internal(x); py = Units.mm_to_internal(y); pz = Units.mm_to_internal(z)
       dx = Units.mm_to_internal(width); dy = Units.mm_to_internal(depth); dz = Units.mm_to_internal(height)
       face = group.entities.add_face([
@@ -356,16 +502,31 @@ module HomeCAD
       wall, = Architecture.wall_entity!(model, { 'homecad_id' => values['wall_id'] })
       Architecture.require_mutable!(wall)
       revision = Metadata.read(root)['revision']
-      return MutationResult.success(operation: 'update_kitchen_run', updated: [serialize(root)], revision: revision) if KitchenData.canonical(current) == KitchenData.canonical(values)
+      return MutationResult.success(operation: 'update_kitchen_run', updated: [serialize(root)], revision: revision) if
+        KitchenData.canonical(editable_input(current)) == KitchenData.canonical(editable_input(values))
+
+      previous_children = child_serializations(root)
+      assign_semantic_objects!(values, current)
+      rebuild = current['semantic_objects'] != values['semantic_objects'] ||
+        KitchenData.canonical(editable_input(current).reject { |key, _| key == 'name' }) !=
+        KitchenData.canonical(editable_input(values).reject { |key, _| key == 'name' })
 
       Operation.run('Update kitchen run', model: model) do
         KitchenData.write(root, values)
         root.name = values['name']
-        root.transformation = run_transform(model, values)
-        build_geometry!(model, root, values, proposed)
+        if rebuild
+          root.transformation = run_transform(model, values)
+          build_geometry!(model, root, values, proposed)
+        end
         Metadata.increment_revision!(root)
-        MutationResult.success(operation: 'update_kitchen_run', updated: [serialize(root)],
-                               revision: Metadata.read(root)['revision'])
+        children = rebuild ? child_serializations(root) : []
+        previous_ids = previous_children.map { |child| child['homecad_id'] }
+        current_ids = children.map { |child| child['homecad_id'] }
+        MutationResult.success(operation: 'update_kitchen_run',
+          created: children.reject { |child| previous_ids.include?(child['homecad_id']) },
+          updated: [serialize(root)] + children.select { |child| previous_ids.include?(child['homecad_id']) },
+          deleted: rebuild ? previous_children.reject { |child| current_ids.include?(child['homecad_id']) } : [],
+          revision: Metadata.read(root)['revision'])
       end
     rescue Runtime::BridgeError then raise
     rescue StandardError => error
@@ -376,11 +537,11 @@ module HomeCAD
       Primitives.check_keys!(request, %w[target])
       root, = resolve_run(model, request['target'])
       Architecture.require_mutable!(root)
-      tombstone = serialize(root)
+      tombstones = [serialize(root)] + child_serializations(root)
       revision = Metadata.read(root)['revision']
       Operation.run('Delete kitchen run', model: model) do
         model.entities.erase_entities(root)
-        MutationResult.success(operation: 'delete_kitchen_run', deleted: [tombstone], revision: revision)
+        MutationResult.success(operation: 'delete_kitchen_run', deleted: tombstones, revision: revision)
       end
     end
 
@@ -397,9 +558,19 @@ module HomeCAD
         path: [Scene.id(entity)], transform: nil), level: 'detailed')
     end
 
+    def self.child_serializations(root)
+      root.entities.to_a.filter_map do |child|
+        next unless Metadata.read(child)['homecad_id']
+
+        entry = Scene::Entry.new(entity: child, parent: root,
+          path: [Scene.id(root), Scene.id(child)], transform: root.transformation)
+        Serializer.serialize(entry, level: 'detailed')
+      end
+    end
+
     def self.number(value, label) = Geometry.finite_number(value, label)
     def self.editable_input(values)
-      values.reject { |key, _| %w[tier span_mm top_mm run_start_mm].include?(key) }
+      values.reject { |key, _| %w[tier span_mm top_mm run_start_mm semantic_objects].include?(key) }
     end
     def self.invalid!(message) = Primitives.invalid!(message)
     def self.constraint!(message) = Architecture.constraint!(message)

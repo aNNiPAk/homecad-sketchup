@@ -12,7 +12,7 @@
 - A `kitchen.run` is one root-level generated Group with a HomeCAD UUID. `Kitchen` is the project-level concept, not a parent Group around the model.
 - A run is on one HomeCAD Wall side and one tier: `base`, `wall`, or `tall`. Wall U offsets are in millimeters. Modules are ordered by increasing Wall U. This restriction keeps validation and worktop coverage deterministic.
 - The plan is read-only and contains normalized input, calculated module positions, optional end filler, warnings, conflicts, and the Wall revision. Applying revalidates against the current model and rejects stale plans.
-- Modules are generated child Groups with semantic type/key, without independent UUIDs. Appliance, sink and hob models are concept volumes; manufacturing detail and real countertop cutouts are outside this first Kitchen layer.
+- Modules are generated child Groups with semantic type/key and a stable UUID in M5.1. Appliance, sink and hob models are concept volumes; manufacturing detail and real countertop cutouts are outside this first Kitchen layer.
 - The run root uses a rigid wall-relative transform and the generic WallAttachment projection. A Wall update can relocate the run without rescaling geometry. The run parameters remain canonical; generated children are never edited through primitives.
 - A plan may leave unallocated wall length. An end filler is generated only when the gap is at most the bounded filler maximum. Validation reports missing countertop coverage and collisions conservatively.
 
@@ -25,3 +25,9 @@ The [Entities API](https://ruby.sketchup.com/Sketchup/Entities.html), [Model API
 ## M5.1 planning contract
 
 `start_mm`/`end_mm` define the requested Wall U interval. Explicit `start_clearance_mm`/`end_clearance_mm` reserve its ends; `run_start_mm` is derived and controls the generated root WallAttachment. The planner normalizes a small `constraints` object and reports full-coverage, countertop-coverage, opening-clearance, and depth violations as conflicts. This keeps the read-only plan useful before a mutation and prevents applying a plan with an uncovered required worktop.
+
+## M5.1 semantic identity and collision decisions
+
+The run root remains the authority for editable module order and dimensions. `semantic_objects` is a derived identity/revision map keyed by stable module key or generated part role. UUIDs are assigned only during apply/update, never during read-only planning. A regenerated child receives the same HomeCAD UUID while SketchUp persistent/entity IDs may change. A type change under the same module key is a semantic update and increments that child's revision. Name-only run updates do not rebuild children; Wall relocation changes the root transform while preserving wall-local module parameters and child revisions. Nested semantic Groups are discovered through shared Targeting and serialized through the common entity serializer.
+
+KitchenRun-vs-KitchenRun collisions compare bounded rectangles in Wall U/Z and outward depth rather than the coarse full-run WallAttachment span. Appliances and upper cabinets receive distinct conflict codes. Unknown wall attachments retain conservative span checks. This is a spatial check, not a SketchUp solid intersection test or a door-swing simulation.

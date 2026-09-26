@@ -65,7 +65,9 @@ async def run(output: Path) -> None:
                 wall, _ = await call("create_wall", {"start_mm": [0, 0, 0], "end_mm": [4000, 0, 0],
                     "thickness_mm": 120, "height_mm": 2700, "name": "M5 Smoke Wall"})
                 wall_id = wall["created"][0]["identity"]["homecad_id"]
-                request = {"wall": {"homecad_id": wall_id}, "start_mm": 100, "end_mm": 2000,
+                request = {"wall": {"homecad_id": wall_id}, "start_mm": 100, "end_mm": 2100,
+                    "start_clearance_mm": 50, "end_clearance_mm": 50,
+                    "constraints": {"require_full_coverage": True, "require_countertop": True},
                     "side": "negative_v", "modules": [
                         {"key": "sink", "type": "sink", "width_mm": 600},
                         {"key": "dishwasher", "type": "dishwasher", "width_mm": 600},
@@ -73,10 +75,25 @@ async def run(output: Path) -> None:
                 before_plan, _ = await call("get_model_info")
                 plan, _ = await call("plan_kitchen_run", request)
                 after_plan, _ = await call("get_model_info")
-                if plan["conflicts"] or plan["filler_mm"] != 100 or before_plan["root_entity_count"] != after_plan["root_entity_count"]:
+                if (plan["conflicts"] or plan["filler_mm"] != 100 or
+                    plan["positions"][0]["offset_mm"] != 150 or
+                    before_plan["root_entity_count"] != after_plan["root_entity_count"]):
                     raise SmokeError("planning changed the model or produced an unexpected layout")
+                uncovered, _ = await call("plan_kitchen_run", {**request, "countertop": False})
+                if not any(c["code"] == "countertop_missing_coverage" for c in uncovered["conflicts"]):
+                    raise SmokeError("missing countertop coverage was not reported")
                 result, _ = await call("apply_kitchen_run", {"plan": plan})
                 run_id = result["created"][0]["identity"]["homecad_id"]
+                modules = {item["metadata"].get("module_key"): item for item in result["created"][1:]
+                           if item.get("metadata", {}).get("module_key")}
+                if set(modules) != {"sink", "dishwasher", "hob"} or any(
+                    not item["homecad_id"] for item in modules.values()):
+                    raise SmokeError("semantic Kitchen modules lack HomeCAD identities")
+                sink_id = modules["sink"]["homecad_id"]
+                hob_id = modules["hob"]["homecad_id"]
+                sink_before, _ = await call("get_object", {"target": {"homecad_id": sink_id}})
+                if sink_before["homecad_type"] != "kitchen.base_cabinet":
+                    raise SmokeError("sink module has the wrong semantic type")
                 run, _ = await call("get_object", {"target": {"homecad_id": run_id}})
                 if run["metadata"]["type"] != "kitchen.run" or run["metadata"]["revision"] != 1:
                     raise SmokeError("KitchenRun metadata is incorrect")
@@ -114,14 +131,23 @@ async def run(output: Path) -> None:
                 output.parent.mkdir(parents=True, exist_ok=True)
                 output.write_bytes(base64.b64decode(image.data, validate=True))
                 print(f"saved screenshot: {output.resolve()}")
+                changed_modules = list(request["modules"])
+                changed_modules[2] = {**changed_modules[2], "width_mm": 650}
                 updated, _ = await call("update_kitchen_run", {"target": {"homecad_id": run_id},
-                    "changes": {"name": "M5 Updated Run"}})
+                    "changes": {"modules": changed_modules}})
                 if updated["revision"] != 2:
                     raise SmokeError("KitchenRun revision did not increment")
+                sink_after, _ = await call("get_object", {"target": {"homecad_id": sink_id}})
+                hob_after, _ = await call("get_object", {"target": {"homecad_id": hob_id}})
+                if sink_after["metadata"]["revision"] != 1 or hob_after["metadata"]["revision"] != 2:
+                    raise SmokeError("module UUIDs or revisions changed incorrectly during regeneration")
                 await undo_one()
                 restored, _ = await call("get_object", {"target": {"homecad_id": run_id}})
                 if restored["metadata"]["revision"] != 1:
                     raise SmokeError("Undo did not restore KitchenRun revision")
+                restored_hob, _ = await call("get_object", {"target": {"homecad_id": hob_id}})
+                if restored_hob["metadata"]["revision"] != 1:
+                    raise SmokeError("Undo did not restore module revision")
             finally:
                 cleanup_failed = False
                 while pending_undos > 0:

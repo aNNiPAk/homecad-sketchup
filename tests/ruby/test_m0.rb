@@ -8,8 +8,9 @@ module UI
 end
 
 FakeModel = Struct.new(:name, :title, :path, :guid, :entities, :active_entities,
-                       :selection, :modified, keyword_init: true) do
+                       :selection, :modified, :attributes, keyword_init: true) do
   def modified? = modified
+  def get_attribute(dictionary, key, default = nil) = (attributes || {}).fetch([dictionary, key], default)
 end
 
 module Sketchup
@@ -37,7 +38,7 @@ class M0Test < Minitest::Test
   def setup
     Sketchup.active_model = FakeModel.new(name: '', title: '', path: '', guid: 'abc',
                                           entities: [1, 2], active_entities: [1],
-                                          selection: [], modified: false)
+                                          selection: [], modified: false, attributes: {})
     probe = TCPServer.new('127.0.0.1', 0)
     port = probe.addr[1]
     probe.close
@@ -102,6 +103,29 @@ class M0Test < Minitest::Test
     assert_equal 2, info['root_entity_count']
     assert_equal 1, info['active_entity_count']
     assert_nil info['path']
+    assert_equal false, info['dev_fixture']
+    assert_nil info['dev_fixture_id']
+  end
+
+  def test_model_info_reports_only_valid_dev_fixture_marker
+    model = Sketchup.active_model
+    model.attributes = { ['HomeCADDev', 'fixture_id'] => 'homecad-smoke-v1',
+                         ['HomeCADDev', 'disposable'] => true }
+    @client.close
+    @client = TCPSocket.new('127.0.0.1', @server.instance_variable_get(:@port))
+    hello
+    send_request(2, 'get_model_info')
+    info = next_response['result']
+    assert_equal true, info['dev_fixture']
+    assert_equal 'homecad-smoke-v1', info['dev_fixture_id']
+    model.attributes[['HomeCADDev', 'disposable']] = false
+    @client.close
+    @client = TCPSocket.new('127.0.0.1', @server.instance_variable_get(:@port))
+    hello
+    send_request(2, 'get_model_info')
+    ordinary = next_response['result']
+    assert_equal false, ordinary['dev_fixture']
+    assert_nil ordinary['dev_fixture_id']
   end
 
   def test_version_mismatch_and_pre_hello_rejection

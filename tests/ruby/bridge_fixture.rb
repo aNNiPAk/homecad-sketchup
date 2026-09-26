@@ -282,6 +282,7 @@ module Sketchup
     attr_reader :name, :title, :path, :guid, :entities, :active_entities, :selection, :active_view
     def initialize(camera)
       @name, @title, @path, @guid = 'Fixture Apartment', 'fixture', 'fixture.skp', 'fixture-guid'
+      @attributes = {}
       @entities = FixtureEntities.new(self)
       @active_entities = @entities
       @selection = []
@@ -314,6 +315,8 @@ module Sketchup
     def start_operation(*) = true
     def commit_operation = true
     def abort_operation = true
+    def get_attribute(dictionary, key, default = nil) = @attributes.fetch([dictionary, key], default)
+    def set_attribute(dictionary, key, value) = (@attributes[[dictionary, key]] = value)
   end
 
   def self.version = '2026.0-test'

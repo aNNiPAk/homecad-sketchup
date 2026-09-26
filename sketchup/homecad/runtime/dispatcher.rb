@@ -93,12 +93,17 @@ module HomeCAD
 
       def self.model_info
         model = active_model!
+        fixture_id = model.get_attribute('HomeCADDev', 'fixture_id') if model.respond_to?(:get_attribute)
+        disposable = model.get_attribute('HomeCADDev', 'disposable') if model.respond_to?(:get_attribute)
+        dev_fixture = fixture_id == 'homecad-smoke-v1' && disposable == true
         { 'name' => model_name(model), 'title' => model.title,
           'path' => model.path.empty? ? nil : model.path,
           'guid' => model.guid, 'modified' => model.modified?,
           'root_entity_count' => model.entities.length,
           'active_entity_count' => model.active_entities.length,
-          'selection_count' => model.selection.length }
+          'selection_count' => model.selection.length,
+          'dev_fixture' => dev_fixture,
+          'dev_fixture_id' => dev_fixture ? fixture_id : nil }
       end
 
       def self.active_model!

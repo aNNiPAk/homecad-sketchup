@@ -12,6 +12,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from homecad_mcp import VERSION
+from smoke_guard import SmokeGuardError, validate_disposable_fixture
 
 
 class SmokeError(RuntimeError):
@@ -97,6 +98,10 @@ async def run(output: Path) -> None:
                 if "furniture.core.v1" not in status.get("capabilities", []):
                     raise SmokeError("Installed RBZ does not advertise furniture.core.v1; install the M4 RBZ and restart SketchUp")
                 info, _ = await call("get_model_info")
+                try:
+                    validate_disposable_fixture(True, info)
+                except SmokeGuardError as error:
+                    raise SmokeError(str(error)) from error
                 initial_modified = info["modified"]
 
                 wall, _ = await call("create_wall", {"start_mm": [0, 0, 0], "end_mm": [4000, 0, 0],

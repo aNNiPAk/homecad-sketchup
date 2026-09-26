@@ -11,6 +11,7 @@ from pathlib import Path
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from homecad_mcp import VERSION
+from smoke_guard import SmokeGuardError, validate_disposable_fixture
 
 
 class SmokeError(RuntimeError):
@@ -129,6 +130,10 @@ async def run(output: Path) -> None:
             if "geometry.primitive.v1" not in status.get("capabilities", []):
                 raise SmokeError("Installed RBZ does not advertise geometry.primitive.v1; rebuild, reinstall, and restart SketchUp")
             initial, _ = await call("get_model_info")
+            try:
+                validate_disposable_fixture(True, initial)
+            except SmokeGuardError as error:
+                raise SmokeError(str(error)) from error
             print(f"Initial model modified state: {initial['modified']}")
 
             try:

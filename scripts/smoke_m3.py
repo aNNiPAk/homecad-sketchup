@@ -11,6 +11,7 @@ from pathlib import Path
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from homecad_mcp import VERSION
+from smoke_guard import SmokeGuardError, validate_disposable_fixture
 
 
 class SmokeError(RuntimeError):
@@ -98,6 +99,10 @@ async def run(output: Path) -> None:
                 if "architecture.core.v1" not in status.get("capabilities", []):
                     raise SmokeError("Installed RBZ does not advertise architecture.core.v1; install the built M3 RBZ and restart SketchUp")
                 initial_info, _ = await call("get_model_info")
+                try:
+                    validate_disposable_fixture(True, initial_info)
+                except SmokeGuardError as error:
+                    raise SmokeError(str(error)) from error
                 print(f"Initial model modified state: {initial_info['modified']}")
 
                 wall_id = await create_wall([0, 0, 0], [4000, 0, 0], "M3 Smoke Wall")

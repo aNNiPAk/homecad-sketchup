@@ -44,6 +44,8 @@ async def test_python_to_ruby_bridge():
         info = await client.call("get_model_info")
         assert info["root_entity_count"] == 2
         assert info["guid"] == "fixture-guid"
+        assert info["dev_fixture"] is False
+        assert info["dev_fixture_id"] is None
         listing = await client.call("list_objects", {"limit": 1})
         assert listing["has_more"] is True
         assert listing["objects"][0]["identity"]["persistent_id"] == 11

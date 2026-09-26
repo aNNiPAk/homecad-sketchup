@@ -4,6 +4,7 @@
 
 ### Added
 
+- M5 KitchenRun planning and application under `kitchen.run.v1`: ordered base, wall, and tall modules; bounded filler, concept countertop/plinth, current-plan checks, read-only validation, semantic updates/deletion, and guarded real SketchUp smoke.
 - Windows development harness with a repository junction, disposable fixture marker, exact SketchUp process ownership, and fresh-process fast/packaged verification; destructive M2–M4 smokes now refuse unmarked models.
 - M4 Furniture Core: a parametric Cabinet with concept/construction detail, shelves, configurable fronts, stable local frame, parameter-derived part schedule, and wall-local placement under `furniture.core.v1`.
 - Generic WallAttachment indexing and dependency handling; Wall updates relocate attached Cabinets after preflight, and cascaded Wall deletion returns Cabinet tombstones in the same Undo operation.
@@ -22,11 +23,12 @@
 
 ### Changed
 
+- Bumped the pre-1.0 version to 0.7.0 for the additive Kitchen capability and tools; protocol version remains 1.
 - Set the minimum supported Python MCP SDK to 1.30, the version currently locked and tested by the project.
 - Renamed generic entity `dimensions_mm` / `measure(kind="dimensions")` to `bbox_dimensions_mm` / `measure(kind="bbox_dimensions")`; both now state explicitly that values are world-aligned bounding-box extents. Bumped the pre-1.0 version to 0.3.0 for M1.1 and 0.4.0 for M2.
 - Bumped the pre-1.0 version to 0.4.2 after the SketchUp 26.2 smoke exposed reversed bounds from the prior `split` result selection. The rebuilt `subtract` direction was confirmed by the asymmetric SketchUp 26.2.243 smoke.
 - Bumped the pre-1.0 version to 0.5.0 for the additive Architecture domain capability and tool set. Protocol version remains 1.
-- M2 remains a low-level fallback. M3 adds Architecture and M4 adds the Cabinet Furniture core; Kitchen, Electrical, Lighting, and `eval_ruby` are not included.
+- M2 remains a low-level fallback. M3 adds Architecture, M4 adds the Cabinet Furniture core, and M5 adds straight Kitchen runs; Electrical, Lighting, and `eval_ruby` are not included.
 - Bumped the pre-1.0 version to 0.6.1 for the Cabinet geometry correction. Protocol version remains 1.
 - Bumped the pre-1.0 version to 0.6.0 for the additive Furniture capability and Cabinet tools. Protocol version remains 1.
 

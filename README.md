@@ -1,10 +1,10 @@
 # HomeCAD for SketchUp
 
-HomeCAD is a local MCP interface for inspecting and safely editing a SketchUp scene. M3 adds a semantic parametric Architecture layer and M4 adds the Furniture Core Cabinet model. M2 primitives remain a low-level developer/fallback API. The roadmap is in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+HomeCAD is a local MCP interface for inspecting and safely editing a SketchUp scene. M3 adds parametric Architecture, M4 adds Furniture Core, and M5 adds planned Kitchen runs. M2 primitives remain a low-level developer/fallback API. The roadmap is in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
 ## Requirements
 
-- Windows with SketchUp and Ruby extension support. Install the matching M4 RBZ for Furniture tools.
+- Windows with SketchUp and Ruby extension support. Install the matching RBZ for Kitchen tools.
 - [uv](https://docs.astral.sh/uv/) with Python 3.11+ for MCP and packaging.
 - Ruby 3.x for standalone Ruby tests; SketchUp supplies its own runtime when the extension is installed.
 
@@ -17,7 +17,7 @@ uv sync --project mcp
 uv run --project mcp python scripts/build_rbz.py
 ```
 
-Install `dist\homecad.rbz` with **SketchUp → Extensions → Extension Manager → Install Extension**, then restart SketchUp. The Ruby Console should show `[HomeCAD] INFO listening on 127.0.0.1:37941`. Confirm that `homecad_status.ruby_extension_version` says `0.6.1` and that it advertises `furniture.core.v1` before running the M4 smoke test.
+Install `dist\homecad.rbz` with **SketchUp → Extensions → Extension Manager → Install Extension**, then restart SketchUp. The Ruby Console should show `[HomeCAD] INFO listening on 127.0.0.1:37941`. Confirm that `homecad_status.ruby_extension_version` says `0.7.0` and advertises `kitchen.run.v1` before using Kitchen tools.
 
 The M0 connection check remains available:
 
@@ -94,6 +94,19 @@ uv run --project mcp python scripts/smoke_m4.py --confirm-disposable
 
 See [the M4 contract](tests/contracts/m4.md) and [M4 decisions](docs/M4_DECISIONS.md). Standalone fakes cannot verify actual SketchUp panel topology, view framing, wall-host placement, or native Undo behavior; those require a SketchUp kernel run.
 
+## Kitchen runs (M5)
+
+M5 adds `kitchen.run.v1` and a two-phase workflow: `plan_kitchen_run` reads a HomeCAD Wall and returns ordered module positions, an optional bounded end filler, warnings, and conflicts without editing the model. `apply_kitchen_run` accepts that exact plan, recomputes it against the current Wall and scene, then creates one generated KitchenRun in one Undo operation. `validate_kitchen` is read-only; `update_kitchen_run` and `delete_kitchen_run` edit the semantic root. The run follows its Wall through the shared attachment projection, and primitive tools cannot edit generated Kitchen children.
+
+Each straight run has one tier: base, wall, or tall. Base modules include shelves, drawers, sink, hob, dishwasher, and oven; tall modules include storage and fridge; wall modules include shelves and lift front. Appliance and sink/hob geometry is conceptual. A base run may generate a single straight countertop, plinth, and end filler. All placement lengths are millimeters in the Wall U frame. See [the M5 contract](tests/contracts/m5.md) and [M5 decisions](docs/M5_DECISIONS.md) for module schemas and current limitations.
+
+The guarded real SketchUp smoke captures a KitchenRun, checks validation and Undo cleanup, and requires the dedicated disposable fixture:
+
+```powershell
+uv run --project mcp python scripts/dev_verify.py --milestone m5 --fast
+uv run --project mcp python scripts/dev_verify.py --milestone m5 --packaged
+```
+
 ## Automated SketchUp development
 
 Set up the repository-linked development extension and the dedicated disposable model once:
@@ -144,7 +157,8 @@ ruby tests/ruby/test_primitives.rb
 ruby tests/ruby/test_mutations.rb
 ruby tests/ruby/test_architecture.rb
 ruby tests/ruby/test_furniture.rb
+ruby tests/ruby/test_kitchen.rb
 uv run --project mcp python scripts/build_rbz.py
 ```
 
-The [GitHub Actions workflow](.github/workflows/ci.yml) runs Python, standalone Ruby, and RBZ packaging checks on pushes and pull requests; it does not require SketchUp. The Python suite includes Python-to-Ruby bridge fixtures and MCP stdio tests. Ruby tests use SketchUp API stand-ins. With the dev fixture configured, the harness can also run the M1–M4 real SketchUp smokes through `--milestone m1|m2|m3|m4`.
+The [GitHub Actions workflow](.github/workflows/ci.yml) runs Python, standalone Ruby, and RBZ packaging checks on pushes and pull requests; it does not require SketchUp. The Python suite includes Python-to-Ruby bridge fixtures and MCP stdio tests. Ruby tests use SketchUp API stand-ins. With the dev fixture configured, the harness can also run the M1–M5 real SketchUp smokes through `--milestone m1|m2|m3|m4|m5`.

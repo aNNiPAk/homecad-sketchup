@@ -35,6 +35,26 @@ class KitchenTest < Minitest::Test
     end
   end
 
+  def test_start_end_clearances_and_planning_constraints
+    layout = input.merge('end_mm' => 2150, 'start_clearance_mm' => 50,
+      'end_clearance_mm' => 100, 'constraints' => {
+        'require_full_coverage' => true, 'max_module_depth_mm' => 600,
+        'min_opening_clearance_mm' => 25 })
+    plan = HomeCAD::Kitchen.plan(@model, layout)
+    assert_equal 150.0, plan['positions'].first['offset_mm']
+    assert_equal 100.0, plan['filler_mm']
+    assert_equal 150.0, plan.dig('params', 'run_start_mm')
+    assert_empty plan['conflicts']
+    assert_empty @model.events
+    unfilled = HomeCAD::Kitchen.plan(@model, layout.merge('end_mm' => 2300))
+    assert_includes unfilled['conflicts'].map { |c| c['code'] }, 'unallocated_space'
+    no_top = HomeCAD::Kitchen.plan(@model, layout.merge('countertop' => false))
+    assert_includes no_top['conflicts'].map { |c| c['code'] }, 'countertop_missing_coverage'
+    shallow = HomeCAD::Kitchen.plan(@model, layout.merge('constraints' => {
+      'max_module_depth_mm' => 500 }))
+    assert_includes shallow['conflicts'].map { |c| c['code'] }, 'module_depth_exceeded'
+  end
+
   def test_apply_update_delete_use_one_operation_and_stable_identity
     plan = HomeCAD::Kitchen.plan(@model, input)
     result = HomeCAD::Kitchen.apply(@model, 'plan' => plan)

@@ -384,14 +384,20 @@ async def delete_furniture_object(target: dict) -> dict:
 @mcp.tool(annotations=READ_ONLY_TOOL)
 async def plan_kitchen_run(wall: dict, start_mm: float, end_mm: float,
                            side: str, modules: list[dict], clearance_mm: float = 0,
+                           start_clearance_mm: float = 0, end_clearance_mm: float = 0,
                            filler_max_mm: float = 150, countertop: bool | None = None,
                            countertop_thickness_mm: float = 38,
-                           plinth: bool | None = None, name: str = "Kitchen run") -> dict:
+                           plinth: bool | None = None, constraints: dict | None = None,
+                           name: str = "Kitchen run") -> dict:
     """Plan ordered modules on one Wall side in millimeters without modifying SketchUp."""
     params = {"wall": wall, "start_mm": start_mm, "end_mm": end_mm,
               "side": side, "modules": modules, "clearance_mm": clearance_mm,
+              "start_clearance_mm": start_clearance_mm,
+              "end_clearance_mm": end_clearance_mm,
               "filler_max_mm": filler_max_mm,
               "countertop_thickness_mm": countertop_thickness_mm, "name": name}
+    if constraints is not None:
+        params["constraints"] = constraints
     if countertop is not None:
         params["countertop"] = countertop
     if plinth is not None:

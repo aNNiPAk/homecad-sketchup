@@ -22,7 +22,7 @@ module HomeCAD
       entity.set_attribute(Metadata::DICTIONARY, 'wall_id', params['wall_id'])
       WallAttachment.sync!(entity, placement: {
         'mode' => 'wall', 'wall_id' => params['wall_id'],
-        'offset_mm' => params['start_mm'], 'bottom_mm' => 0.0,
+        'offset_mm' => params['run_start_mm'], 'bottom_mm' => 0.0,
         'side' => params['side'], 'clearance_mm' => params['clearance_mm']
       }, span_u_mm: params['span_mm'], span_z_mm: params['top_mm'])
     end
@@ -51,8 +51,11 @@ module HomeCAD
       'wall' => [350.0, 720.0, 1400.0],
       'tall' => [600.0, 2100.0, 0.0]
     }.freeze
-    INPUT_KEYS = %w[wall wall_id start_mm end_mm side modules clearance_mm
-                    filler_max_mm countertop countertop_thickness_mm plinth name].freeze
+    INPUT_KEYS = %w[wall wall_id start_mm end_mm start_clearance_mm end_clearance_mm
+                    side modules clearance_mm filler_max_mm countertop
+                    countertop_thickness_mm plinth constraints name].freeze
+    CONSTRAINT_KEYS = %w[require_full_coverage require_countertop
+                         min_opening_clearance_mm max_module_depth_mm].freeze
 
     def self.dispatch(model, method, params)
       case method
@@ -75,6 +78,12 @@ module HomeCAD
       end_mm = number(input['end_mm'], 'end_mm')
       invalid!('start_mm must precede end_mm') unless end_mm > start_mm + TOLERANCE_MM
       constraint!('run must fit on the wall') if start_mm < -TOLERANCE_MM || end_mm > frame.length_mm + TOLERANCE_MM
+      start_clearance = number(input.fetch('start_clearance_mm', 0), 'start_clearance_mm')
+      end_clearance = number(input.fetch('end_clearance_mm', 0), 'end_clearance_mm')
+      constraint!('start/end clearance must be nonnegative') if start_clearance.negative? || end_clearance.negative?
+      run_start = start_mm + start_clearance
+      available_end = end_mm - end_clearance
+      constraint!('start/end clearances leave no available run') if available_end <= run_start + TOLERANCE_MM
       side = input['side']
       invalid!('side must be positive_v or negative_v') unless WallAttachment::SIDES.include?(side)
       modules = input['modules']
@@ -115,26 +124,52 @@ module HomeCAD
       plinth = input.fetch('plinth', tier == 'base')
       constraint!('countertop and plinth are only supported for base runs') if tier != 'base' && (countertop || plinth)
       constraint!('plinth requires module depth above 40 mm') if plinth && normalized.any? { |item| item['depth_mm'] <= 40 }
+      constraints = input.fetch('constraints', {})
+      invalid!('constraints must be an object') unless constraints.is_a?(Hash)
+      Primitives.check_keys!(constraints, CONSTRAINT_KEYS)
+      full_coverage = constraints.fetch('require_full_coverage', false)
+      required_countertop = constraints.fetch('require_countertop', tier == 'base')
+      invalid!('coverage constraints must be boolean') unless [true, false].include?(full_coverage) &&
+        [true, false].include?(required_countertop)
+      opening_clearance = number(constraints.fetch('min_opening_clearance_mm', 0), 'min_opening_clearance_mm')
+      constraint!('min_opening_clearance_mm must be nonnegative') if opening_clearance.negative?
+      max_depth = constraints['max_module_depth_mm']
+      max_depth = Geometry.positive_length(max_depth, 'max_module_depth_mm') unless max_depth.nil?
+      constraints = { 'require_full_coverage' => full_coverage,
+        'require_countertop' => required_countertop,
+        'min_opening_clearance_mm' => opening_clearance,
+        'max_module_depth_mm' => max_depth }
       name = input.fetch('name', 'Kitchen run')
       invalid!('name must be a nonempty string of at most 128 characters') unless name.is_a?(String) && !name.strip.empty? && name.length <= 128
 
       positions = []
-      cursor = start_mm
+      cursor = run_start
       normalized.each do |item|
         positions << { 'key' => item['key'], 'type' => item['type'], 'offset_mm' => cursor,
                        'width_mm' => item['width_mm'], 'bottom_mm' => item['bottom_mm'],
                        'height_mm' => item['height_mm'] }
         cursor += item['width_mm']
       end
-      remaining = end_mm - cursor
+      remaining = available_end - cursor
       conflicts = []
       conflicts << conflict('negative_filler', 'modules exceed the available wall range') if remaining < -TOLERANCE_MM
       filler = remaining.positive? && remaining <= filler_max ? remaining : 0.0
-      span = cursor - start_mm + filler
+      span = cursor - run_start + filler
+      conflicts << conflict('unallocated_space', 'run leaves more unallocated space than allowed') if
+        full_coverage && remaining - filler > TOLERANCE_MM
+      conflicts << conflict('countertop_missing_coverage', 'base modules require countertop coverage') if
+        tier == 'base' && required_countertop && !countertop
+      normalized.each do |item|
+        next if max_depth.nil? || item['depth_mm'] <= max_depth + TOLERANCE_MM
+
+        conflicts << conflict('module_depth_exceeded', "module #{item['key']} exceeds maximum depth", item['key'])
+      end
       top = normalized.map { |item| item['bottom_mm'] + item['height_mm'] }.max
       top += countertop_thickness if countertop
       constraint!('run must fit below wall top') if top > wall_params['height_mm'] + TOLERANCE_MM
       canonical = { 'wall_id' => wall_id, 'start_mm' => start_mm, 'end_mm' => end_mm,
+        'start_clearance_mm' => start_clearance, 'end_clearance_mm' => end_clearance,
+        'run_start_mm' => run_start, 'constraints' => constraints,
         'side' => side, 'modules' => normalized, 'clearance_mm' => clearance,
         'filler_max_mm' => filler_max, 'countertop' => countertop,
         'countertop_thickness_mm' => countertop_thickness, 'plinth' => plinth,
@@ -157,7 +192,7 @@ module HomeCAD
         position.merge('height_mm' => position['height_mm'] +
           (params['countertop'] ? params['countertop_thickness_mm'] : 0.0))
       end
-      filler_start = params['start_mm'] + positions.sum { |position| position['width_mm'] }
+      filler_start = params['run_start_mm'] + positions.sum { |position| position['width_mm'] }
       filler_width = params['span_mm'] - positions.sum { |position| position['width_mm'] }
       if filler_width > TOLERANCE_MM
         occupied << { 'key' => 'filler', 'offset_mm' => filler_start,
@@ -168,7 +203,9 @@ module HomeCAD
         next unless Architecture::HOSTED_TYPES.include?(metadata['type'])
         cut = ArchitectureData.read_params(entity)
         occupied.each do |position|
-          next unless overlap?(position['offset_mm'], position['width_mm'], cut['offset_mm'], cut['width_mm'])
+          clearance = params['constraints']['min_opening_clearance_mm']
+          next unless overlap?(position['offset_mm'], position['width_mm'],
+                               cut['offset_mm'] - clearance, cut['width_mm'] + 2 * clearance)
           next unless overlap?(position['bottom_mm'], position['height_mm'], cut.fetch('bottom_mm', 0), cut['height_mm'])
           next if metadata['type'] == 'architecture.niche' && cut['side'] != side
 
@@ -230,7 +267,7 @@ module HomeCAD
       wall, wall_params, = Architecture.wall_entity!(model, { 'homecad_id' => params['wall_id'] })
       frame, normalized = Architecture.validate_wall_params!(wall_params)
       WallAttachment.wall_transform(frame, normalized['thickness_mm'], {
-        'wall_id' => params['wall_id'], 'offset_mm' => params['start_mm'],
+        'wall_id' => params['wall_id'], 'offset_mm' => params['run_start_mm'],
         'bottom_mm' => 0.0, 'side' => params['side'],
         'clearance_mm' => params['clearance_mm'], 'span_u_mm' => params['span_mm'],
         'span_z_mm' => params['top_mm']
@@ -242,8 +279,8 @@ module HomeCAD
       span = values['span_mm']
       plan_data['positions'].each do |position|
         module_data = values['modules'].find { |item| item['key'] == position['key'] }
-        x = values['side'] == 'positive_v' ? position['offset_mm'] - values['start_mm'] :
-          values['start_mm'] + span - position['offset_mm'] - position['width_mm']
+        x = values['side'] == 'positive_v' ? position['offset_mm'] - values['run_start_mm'] :
+          values['run_start_mm'] + span - position['offset_mm'] - position['width_mm']
         group = root.entities.add_group
         group.name = "#{module_data['type']}:#{module_data['key']}"
         group.set_attribute(Metadata::DICTIONARY, 'type', 'kitchen.module')
@@ -362,7 +399,7 @@ module HomeCAD
 
     def self.number(value, label) = Geometry.finite_number(value, label)
     def self.editable_input(values)
-      values.reject { |key, _| %w[tier span_mm top_mm].include?(key) }
+      values.reject { |key, _| %w[tier span_mm top_mm run_start_mm].include?(key) }
     end
     def self.invalid!(message) = Primitives.invalid!(message)
     def self.constraint!(message) = Architecture.constraint!(message)

@@ -21,3 +21,7 @@
 The official [SketchUp Ruby API](https://ruby.sketchup.com/) is the source of truth. `Sketchup::Entities#add_group` and `#add_face` support contained generated geometry; `Sketchup::Model#start_operation`, `#commit_operation`, and `#abort_operation` support one Undo action and rollback. `Geom::Transformation.axes` provides the rigid Wall-relative frame, and `Sketchup::Entity` attribute dictionaries store the run parameters. M5 does not depend on Solid Tools. No external Kitchen implementation or AGPL code was copied; Kitchen geometry and planning are HomeCAD original work built on the M3/M4 foundations.
 
 The [Entities API](https://ruby.sketchup.com/Sketchup/Entities.html), [Model API](https://ruby.sketchup.com/Sketchup/Model.html), [Group API](https://ruby.sketchup.com/Sketchup/Group.html), and [Entity attribute API](https://ruby.sketchup.com/Sketchup/Entity.html) were consulted for this milestone.
+
+## M5.1 planning contract
+
+`start_mm`/`end_mm` define the requested Wall U interval. Explicit `start_clearance_mm`/`end_clearance_mm` reserve its ends; `run_start_mm` is derived and controls the generated root WallAttachment. The planner normalizes a small `constraints` object and reports full-coverage, countertop-coverage, opening-clearance, and depth violations as conflicts. This keeps the read-only plan useful before a mutation and prevents applying a plan with an uncovered required worktop.

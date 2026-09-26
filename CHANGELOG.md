@@ -4,6 +4,7 @@
 
 ### Added
 
+- M5.1 Kitchen planning accepts explicit start/end clearances and bounded coverage, countertop, opening-clearance, and module-depth constraints.
 - M5 KitchenRun planning and application under `kitchen.run.v1`: ordered base, wall, and tall modules; bounded filler, concept countertop/plinth, current-plan checks, read-only validation, semantic updates/deletion, and guarded real SketchUp smoke.
 - Windows development harness with a repository junction, disposable fixture marker, exact SketchUp process ownership, and fresh-process fast/packaged verification; destructive M2–M4 smokes now refuse unmarked models.
 - M4 Furniture Core: a parametric Cabinet with concept/construction detail, shelves, configurable fronts, stable local frame, parameter-derived part schedule, and wall-local placement under `furniture.core.v1`.

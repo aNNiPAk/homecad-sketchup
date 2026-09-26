@@ -250,7 +250,9 @@ async def test_kitchen_tools_forward_plan_and_mutation(monkeypatch):
     monkeypatch.setattr("homecad_mcp.server._scene_call", fake)
     modules = [{"key": "sink", "type": "sink", "width_mm": 600}]
     wall = {"homecad_id": "wall"}
-    await plan_kitchen_run(wall, 0, 600, "positive_v", modules)
+    await plan_kitchen_run(wall, 0, 600, "positive_v", modules,
+                           start_clearance_mm=20, end_clearance_mm=30,
+                           constraints={"require_full_coverage": True})
     await apply_kitchen_run({"fingerprint": "plan"})
     await validate_kitchen({"homecad_id": "run"})
     await update_kitchen_run({"homecad_id": "run"}, {"name": "New"})
@@ -259,4 +261,7 @@ async def test_kitchen_tools_forward_plan_and_mutation(monkeypatch):
                                                 "validate_kitchen", "update_kitchen_run",
                                                 "delete_kitchen_run"]
     assert calls[0][1]["modules"] == modules
+    assert calls[0][1]["start_clearance_mm"] == 20
+    assert calls[0][1]["end_clearance_mm"] == 30
+    assert calls[0][1]["constraints"] == {"require_full_coverage": True}
     assert calls[1][1] == {"plan": {"fingerprint": "plan"}}

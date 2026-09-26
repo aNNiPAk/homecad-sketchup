@@ -27,6 +27,7 @@ SMOKES = {
     "m2": (["scripts/smoke_m2.py", "--confirm-disposable"], "geometry.primitive.v1"),
     "m3": (["scripts/smoke_m3.py", "--confirm-disposable"], "architecture.core.v1"),
     "m4": (["scripts/smoke_m4.py", "--confirm-disposable"], "furniture.core.v1"),
+    "m5": (["scripts/smoke_m5.py", "--confirm-disposable"], "kitchen.run.v1"),
 }
 
 FOCUSED_RUBY_TESTS = {
@@ -34,6 +35,7 @@ FOCUSED_RUBY_TESTS = {
     "m2": "tests/ruby/test_mutations.rb",
     "m3": "tests/ruby/test_architecture.rb",
     "m4": "tests/ruby/test_furniture.rb",
+    "m5": "tests/ruby/test_kitchen.rb",
 }
 
 
@@ -62,7 +64,7 @@ def _run_full_tests(root: Path, env: dict[str, str]) -> list[dict]:
             "tests/ruby/test_inspection.rb", "tests/ruby/test_measurement.rb", "tests/ruby/test_capture.rb",
             "tests/ruby/test_undo.rb", "tests/ruby/test_mutation_core.rb", "tests/ruby/test_geometry_validation.rb",
             "tests/ruby/test_primitives.rb", "tests/ruby/test_mutations.rb", "tests/ruby/test_architecture.rb",
-            "tests/ruby/test_furniture.rb")],
+            "tests/ruby/test_furniture.rb", "tests/ruby/test_kitchen.rb")],
         (["uv", "run", "--project", "mcp", "python", "scripts/build_rbz.py"], "RBZ build"),
     ]:
         row = _run(command, root=root, env=env, label=label)

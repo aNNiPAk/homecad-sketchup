@@ -50,6 +50,7 @@ jobs:
           ruby tests/ruby/test_mutations.rb
           ruby tests/ruby/test_architecture.rb
           ruby tests/ruby/test_furniture.rb
+          ruby tests/ruby/test_kitchen.rb
 
       - name: Build RBZ
         run: uv run --project mcp python scripts/build_rbz.py

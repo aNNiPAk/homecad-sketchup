@@ -4,6 +4,8 @@
 
 ### Added
 
+- Read-only analysis of Blum Dynamic Component dictionaries, formulas, material markers, and deduplicated storage estimates for the HCG1 research.
+
 - Research-only HCG1 geometry/instance codec and benchmark report for compact Blum hardware catalogs; no HomeCAD runtime integration or third-party models are included.
 
 - M5.6 opt-in continuous L-shaped countertop with bounded rectangular cutouts, square/beveled free ends, semantic end panels, and conceptual shaped-panel cutlist records under `kitchen.variants.v1`.

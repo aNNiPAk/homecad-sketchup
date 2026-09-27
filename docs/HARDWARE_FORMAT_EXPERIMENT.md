@@ -6,6 +6,8 @@
 
 Повторное использование геометрических деталей даёт сильное сжатие для изученных серий Blum. Для 50 файлов Antaro и MERIVOBOX (56,87 МБ) общий архив HCG1 занял 356,8 КБ, или 0,63% размера исходных `.skp`. **Это сравнение только геометрии:** HCG1 пока не сохраняет материалы, текстуры, атрибуты Dynamic Components и редактируемую структуру SketchUp. Его можно рассматривать как прототип компактного визуального представления, а не как готовую замену исходным моделям.
 
+Динамические словари этих же 50 файлов разобраны отдельно в [отчёте по данным Blum](BLUM_DYNAMIC_DATA_ANALYSIS.md): повторяющиеся наборы значений тоже хорошо сжимаются, но это пока не добавляет HCG1 поведение Dynamic Components.
+
 ## Образцы и способ
 
 Прочитаны 25 файлов [Blum Antaro](<../References/PLUGINS/DC_Change_Mat/Components/Выдвижные ящики/>) и 25 файлов Blum MERIVOBOX из того же каталога. Исходные модели не менялись. [Исследовательский конвертер](../scripts/research/hardware_codec.py) использует установленную библиотеку SketchUp C API для чтения граней, отдельных рёбер, групп, экземпляров компонентов и их преобразований. Геометрию граней он получает через [`SUMeshHelper`](https://extensions.sketchup.com/developers/sketchup_c_api/sketchup/struct_s_u_mesh_helper_ref.html), а вложенность — через [`SUEntities`](https://extensions.sketchup.com/developers/sketchup_c_api/sketchup/struct_s_u_entities_ref.html).

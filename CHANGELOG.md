@@ -44,6 +44,8 @@
 
 ### Changed
 
+- M5.7.1 verifies generated drawer panel bounds against their parameter and cutlist dimensions in standalone and real SketchUp tests. Cabinet cutlists with drawers now warn that slide selection and clearance are project inputs without verified mounting compatibility.
+
 - Bumped matched Python/Ruby extension version to 0.12.0 for M5.7; protocol remains 1.
 
 - Bumped the matched Python/Ruby extension version to 0.11.0 for M5.6; protocol remains 1.

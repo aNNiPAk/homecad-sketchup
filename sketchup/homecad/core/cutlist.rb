@@ -20,7 +20,10 @@ module HomeCAD
       end
       records, warnings = if type == 'furniture.cabinet'
         params = FurnitureData.read_params(entity)
-        [records_for(params, Metadata.read(entity)['homecad_id'], type), []]
+        drawer_warnings = params.fetch('drawers', []).empty? ? [] : [
+          'drawer slide SKU and side clearance are project-selected; mounting and compatibility are unverified'
+        ]
+        [records_for(params, Metadata.read(entity)['homecad_id'], type), drawer_warnings]
       else
         kitchen_records(model, KitchenData.read(entity))
       end

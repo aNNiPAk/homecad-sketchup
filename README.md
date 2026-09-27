@@ -120,7 +120,9 @@ or `update_furniture_object`. Each drawer references a full-width drawer front a
 explicitly selected slide-pair SKU, nominal length and side clearance. Construction detail
 generates five wooden panels. `generate_cutlist` reports those panels and one purchased pair
 per drawer, independent of display detail. No branded geometry, hinge selection, drilling
-or movement is inferred. See [M5.7 contract](tests/contracts/m57.md).
+or movement is inferred. Cutlists with drawers explicitly warn that project-selected slide
+SKUs and clearances have no verified mounting or compatibility rule. See
+[M5.7 contract](tests/contracts/m57.md).
 
 M5.5 adds `plan_corner_kitchen_run` for a single generated L-shaped `kitchen.run` across two
 connected, perpendicular Walls. The two ordered base legs face the same interior. The corner

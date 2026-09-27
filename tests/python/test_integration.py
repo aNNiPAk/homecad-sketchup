@@ -378,6 +378,8 @@ async def test_m57_hardware_cross_language():
         schedule = await client.call("generate_cutlist", {"target": {"homecad_id": cabinet_id}})
         bought = next(row for row in schedule["records"] if row["part_key"] == "drawer:upper/slide_pair")
         assert bought["unit"] == "pair" and bought["quantity"] == 1
+        assert len(schedule["warnings"]) == 1
+        assert "project-selected" in schedule["warnings"][0]
     finally:
         process.terminate()
         await process.wait()

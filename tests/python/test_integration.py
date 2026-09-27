@@ -333,6 +333,56 @@ def test_m56_smoke_requires_disposable_model_confirmation():
     assert "--confirm-disposable" in result.stderr
 
 
+def test_m57_smoke_requires_disposable_model_confirmation():
+    result = __import__("subprocess").run(
+        [sys.executable, "scripts/smoke_m57.py"], cwd=ROOT,
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 2
+    assert "--confirm-disposable" in result.stderr
+
+
+@pytest.mark.asyncio
+async def test_m57_hardware_cross_language():
+    ruby = shutil.which("ruby")
+    if ruby is None:
+        pytest.skip("Ruby executable unavailable")
+    process = await asyncio.create_subprocess_exec(
+        ruby, "tests/ruby/bridge_fixture.rb", cwd=ROOT,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        port = int(await asyncio.wait_for(process.stdout.readline(), 5))
+        client = BridgeClient(Config(port=port))
+        status = await client.call("homecad_status")
+        assert "furniture.hardware.v1" in status["capabilities"]
+        catalog = await client.call("list_hardware_catalog")
+        family = catalog["families"][0]["id"]
+        created = await client.call("create_cabinet", {
+            "width_mm": 600, "depth_mm": 560, "height_mm": 720,
+            "fronts": [{"key": "front", "kind": "drawer_front", "x_mm": 0,
+                        "z_mm": 0, "width_mm": 600, "height_mm": 720}],
+        })
+        cabinet_id = created["created"][0]["homecad_id"]
+        drawer = {"key": "upper", "front_key": "front", "bottom_mm": 100,
+            "height_mm": 200, "depth_mm": 450, "side_thickness_mm": 16,
+            "base_thickness_mm": 8,
+            "slide": {"family_id": family, "sku": "PROJECT-SLIDE-450",
+                      "nominal_length_mm": 450, "side_clearance_mm": 12}}
+        plan = await client.call("plan_cabinet_drawer",
+                                 {"target": {"homecad_id": cabinet_id}, "drawer": drawer})
+        assert plan["status"] == "valid" and len(plan["parts"]) == 5
+        updated = await client.call("update_furniture_object", {
+            "target": {"homecad_id": cabinet_id}, "changes": {"drawers": [drawer]}})
+        assert updated["revision"] == 2
+        schedule = await client.call("generate_cutlist", {"target": {"homecad_id": cabinet_id}})
+        bought = next(row for row in schedule["records"] if row["part_key"] == "drawer:upper/slide_pair")
+        assert bought["unit"] == "pair" and bought["quantity"] == 1
+    finally:
+        process.terminate()
+        await process.wait()
+
+
 @pytest.mark.asyncio
 async def test_m56_corner_variants_cross_language():
     ruby = shutil.which("ruby")
@@ -394,7 +444,8 @@ async def test_mcp_stdio_starts_and_lists_supported_tools():
                 "boolean_operation", "get_wall_frame", "create_wall", "create_opening",
                 "create_door", "create_window", "create_niche", "create_column",
                 "update_architecture_object", "delete_architecture_object", "create_room",
-        "detect_rooms", "get_furniture_frame", "list_furniture_parts", "create_cabinet",
+        "detect_rooms", "get_furniture_frame", "list_furniture_parts",
+        "list_hardware_catalog", "plan_cabinet_drawer", "create_cabinet",
         "update_furniture_object", "delete_furniture_object",
         "get_project_settings", "update_project_settings", "list_furniture_presets",
         "get_furniture_preset", "create_cabinet_from_preset",

@@ -57,7 +57,8 @@ async def run(output: Path) -> None:
 
             try:
                 status, _ = await call("homecad_status")
-                if status.get("ruby_extension_version") != VERSION or "kitchen.run.v1" not in status.get("capabilities", []):
+                if (status.get("ruby_extension_version") != VERSION or
+                    not {"kitchen.run.v1", "kitchen.service_zone.v1"} <= set(status.get("capabilities", []))):
                     raise SmokeError("matching Kitchen RBZ is not installed")
                 info, _ = await call("get_model_info")
                 validate_disposable_fixture(True, info)
@@ -70,7 +71,8 @@ async def run(output: Path) -> None:
                     "constraints": {"require_full_coverage": True, "require_countertop": True},
                     "side": "negative_v", "modules": [
                         {"key": "sink", "type": "sink", "width_mm": 600},
-                        {"key": "dishwasher", "type": "dishwasher", "width_mm": 600},
+                        {"key": "dishwasher", "type": "dishwasher", "width_mm": 600,
+                         "service_clearance_mm": {"front_mm": 150}},
                         {"key": "hob", "type": "hob", "width_mm": 600}]}
                 before_plan, _ = await call("get_model_info")
                 plan, _ = await call("plan_kitchen_run", request)
@@ -79,6 +81,8 @@ async def run(output: Path) -> None:
                     plan["positions"][0]["offset_mm"] != 150 or
                     before_plan["root_entity_count"] != after_plan["root_entity_count"]):
                     raise SmokeError("planning changed the model or produced an unexpected layout")
+                if len(plan["service_zones"]) != 1 or plan["service_findings"]:
+                    raise SmokeError("unexpected initial service zone layout")
                 uncovered, _ = await call("plan_kitchen_run", {**request, "countertop": False})
                 if not any(c["code"] == "countertop_missing_coverage" for c in uncovered["conflicts"]):
                     raise SmokeError("missing countertop coverage was not reported")
@@ -100,6 +104,24 @@ async def run(output: Path) -> None:
                 validation, _ = await call("validate_kitchen", {"target": {"homecad_id": run_id}})
                 if not validation["valid"] or validation["module_count"] != 3:
                     raise SmokeError(f"Kitchen validation failed: {validation}")
+                blocker, _ = await call("create_wall", {"start_mm": [1000, -800, 0],
+                    "end_mm": [1000, -650, 0], "thickness_mm": 120,
+                    "height_mm": 1000, "name": "M5 Service Blocker"})
+                blocker_id = blocker["created"][0]["homecad_id"]
+                blocked, _ = await call("validate_kitchen", {"target": {"homecad_id": run_id}})
+                if (not any(item["object_id"] == blocker_id for item in blocked["service_findings"]) or
+                    not any("service clearance" in warning for warning in blocked["warnings"])):
+                    raise SmokeError("adjacent Wall did not report a service clearance warning")
+                await expect_error("update_kitchen_run", {"target": {"homecad_id": run_id},
+                    "changes": {"constraints": {**plan["params"]["constraints"],
+                        "require_service_clearance": True}}}, "constraint_violation")
+                unchanged, _ = await call("get_object", {"target": {"homecad_id": run_id}})
+                if unchanged["metadata"]["revision"] != 1:
+                    raise SmokeError("strict service clearance rejection changed KitchenRun revision")
+                await undo_one()
+                freed, _ = await call("validate_kitchen", {"target": {"homecad_id": run_id}})
+                if freed["service_findings"]:
+                    raise SmokeError("Undo did not free the Kitchen service zone")
                 await call("create_door", {"wall": {"homecad_id": wall_id},
                     "offset_mm": 300, "width_mm": 800, "height_mm": 2100})
                 invalid, _ = await call("validate_kitchen", {"target": {"homecad_id": run_id}})

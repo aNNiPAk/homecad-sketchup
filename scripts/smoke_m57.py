@@ -166,6 +166,58 @@ async def run() -> None:
                 found = await call("find_objects", {"homecad_id": cabinet_id})
                 if found["resolution"] != "none":
                     raise RuntimeError("Undo left the test Cabinet")
+
+                wall = await mutate("create_wall", {
+                    "start_mm": [1000, 1000, 0], "end_mm": [1000, 5000, 0],
+                    "thickness_mm": 120, "height_mm": 2700})
+                wall_id = wall["created"][0]["identity"]["homecad_id"]
+                placed = await mutate("create_cabinet", {
+                    "width_mm": 600, "depth_mm": 560, "height_mm": 720,
+                    "fronts": [{"key": "front", "kind": "drawer_front", "x_mm": 0,
+                                "z_mm": 0, "width_mm": 600, "height_mm": 720}],
+                    "drawers": [drawer],
+                    "placement": {"mode": "wall", "wall_id": wall_id, "offset_mm": 1000,
+                                  "bottom_mm": 0, "side": "positive_v", "clearance_mm": 10}})
+                placed_id = placed["created"][0]["identity"]["homecad_id"]
+                placed_target = {"homecad_id": placed_id}
+                frame = await call("get_furniture_frame", {"target": placed_target})
+                if frame["origin_mm"] != [930, 2000, 0] or \
+                        frame["x_axis"] != [0, 1, 0] or frame["y_axis"] != [-1, 0, 0]:
+                    raise RuntimeError(f"wall-mounted Cabinet frame is incorrect: {frame}")
+                mounted_parts = await call("list_furniture_parts", {"target": placed_target})
+                mounted = {part["part_key"]: part for part in mounted_parts["parts"]
+                           if part["part_key"].startswith("drawer:")}
+                mounted_children = await call("list_objects", {"parent": placed_target,
+                    "include_generated": True, "limit": 100})
+                if len(mounted) != 5:
+                    raise RuntimeError("wall-mounted Cabinet lacks drawer panel records")
+                for child in mounted_children["objects"]:
+                    if child["name"] not in mounted:
+                        continue
+                    part = mounted[child["name"]]
+                    if part["part_kind"] == "drawer_base":
+                        size = [part["width_mm"], part["height_mm"], part["thickness_mm"]]
+                    elif part["part_kind"] == "drawer_side":
+                        size = [part["thickness_mm"], part["width_mm"], part["height_mm"]]
+                    else:
+                        size = [part["width_mm"], part["thickness_mm"], part["height_mm"]]
+                    x, y, z = part["origin_mm"]
+                    sx, sy, sz = size
+                    expected_min = [frame["origin_mm"][0] - y - sy,
+                                    frame["origin_mm"][1] + x, z]
+                    expected_max = [frame["origin_mm"][0] - y,
+                                    frame["origin_mm"][1] + x + sx, z + sz]
+                    info = await call("get_object", {"target": {
+                        "persistent_id": child["identity"]["persistent_id"]}})
+                    box = info["bbox_mm"]
+                    if any(abs(actual - expected) > 1 for actual, expected in zip(box["min"], expected_min)) or \
+                            any(abs(actual - expected) > 1 for actual, expected in zip(box["max"], expected_max)):
+                        raise RuntimeError(f"wall-mounted {child['name']} has incorrect world bounds: {box}")
+                await undo()
+                await undo()
+                for identifier in (placed_id, wall_id):
+                    if (await call("find_objects", {"homecad_id": identifier}))["resolution"] != "none":
+                        raise RuntimeError("Undo left the wall-mounted smoke geometry")
                 after = await call("get_model_info")
                 if after["root_entity_count"] != before["root_entity_count"]:
                     raise RuntimeError("disposable fixture root entity count changed")

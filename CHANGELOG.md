@@ -4,6 +4,8 @@
 
 ### Added
 
+- Research-only HCG1 geometry/instance codec and benchmark report for compact Blum hardware catalogs; no HomeCAD runtime integration or third-party models are included.
+
 - M5.6 opt-in continuous L-shaped countertop with bounded rectangular cutouts, square/beveled free ends, semantic end panels, and conceptual shaped-panel cutlist records under `kitchen.variants.v1`.
 
 - M5.5 L-shaped two-Wall `kitchen.run` planning and generated void/blind-cabinet corners, multi-Wall dependency checks, stable semantic child IDs, and additive `kitchen.corner_run.v1`.

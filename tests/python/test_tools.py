@@ -284,6 +284,37 @@ async def test_corner_planner_forwards_two_legs(monkeypatch):
     assert calls == [("plan_corner_kitchen_run", {"legs": legs, "corner": corner, "name": "L"})]
 
 
+def test_kitchen_variant_capability_is_additive():
+    old = {"capabilities": ["kitchen.run.v1", "kitchen.corner_run.v1"]}
+    new = {"capabilities": old["capabilities"] + ["kitchen.variants.v1"]}
+    BridgeClient._check_method_capability("plan_corner_kitchen_run", old)
+    BridgeClient._check_method_capability("apply_kitchen_run", old,
+        {"plan": {"params": {"layout_type": "l_shaped"}}})
+    request = {"legs": [], "corner": {}, "countertop": {"enabled": True}}
+    with pytest.raises(BridgeError, match="kitchen.variants.v1"):
+        BridgeClient._check_method_capability("plan_corner_kitchen_run", old, request)
+    with pytest.raises(BridgeError, match="kitchen.variants.v1"):
+        BridgeClient._check_method_capability("apply_kitchen_run", old,
+            {"plan": {"params": {"layout_type": "l_shaped", "panels": {"first": {}}}}})
+    BridgeClient._check_method_capability("plan_corner_kitchen_run", new, request)
+
+
+@pytest.mark.asyncio
+async def test_corner_variant_parameters_forwarded(monkeypatch):
+    from homecad_mcp.server import plan_corner_kitchen_run
+    calls = []
+
+    async def fake(method, params):
+        calls.append((method, params))
+        return {"params": params}
+
+    monkeypatch.setattr("homecad_mcp.server._scene_call", fake)
+    await plan_corner_kitchen_run([], {}, countertop={"enabled": True},
+                                  panels={"first": {"thickness_mm": 18}})
+    assert calls[0][1]["countertop"]["enabled"] is True
+    assert calls[0][1]["panels"]["first"]["thickness_mm"] == 18
+
+
 def test_project_defaults_and_preset_methods_require_separate_capabilities():
     old = {"protocol_version": 1, "ruby_extension_version": "0.7.1",
            "capabilities": ["furniture.core.v1", "kitchen.run.v1"]}

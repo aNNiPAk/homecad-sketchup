@@ -93,6 +93,35 @@ module HomeCAD
         records.concat(records_for(cabinet, object_id, 'kitchen.corner_cabinet', prefix: 'corner'))
         warnings << 'blind corner join is a concept carcass; verify access and panel takeoff before fabrication'
       end
+      if run['layout_type'] == 'l_shaped'
+        if run.dig('countertop', 'enabled')
+          shape = KitchenVariants.footprint(model, run)
+          top = run['countertop']
+          records << { 'record_kind' => 'shaped_panel',
+            'source_object_id' => run.fetch('semantic_objects', {}).fetch('countertop', {})['homecad_id'],
+            'source_type' => 'kitchen.countertop', 'part_key' => 'countertop',
+            'part_kind' => 'countertop', 'quantity' => 1,
+            'length_mm' => shape['arm_lengths_mm'][0],
+            'width_mm' => shape['arm_lengths_mm'][1],
+            'thickness_mm' => top['thickness_mm'], 'material_id' => top['material_id'],
+            'grain_axis' => nil, 'edge_band' => nil, 'sku' => nil,
+            'profile_points_mm' => shape['polygon_mm'],
+            'cutouts_mm' => top['cutouts'], 'manufacturing_status' => 'concept_shaped' }
+          warnings << 'L-shaped countertop profile and cutouts are conceptual; verify fabrication dimensions'
+        end
+        run.fetch('panels', {}).each do |key, panel|
+          leg = run['legs'][key == 'first' ? 0 : 1]
+          records << { 'record_kind' => 'panel',
+            'source_object_id' => run.fetch('semantic_objects', {}).fetch("panel:#{key}", {})['homecad_id'],
+            'source_type' => 'kitchen.end_panel', 'part_key' => "panel:#{key}",
+            'part_kind' => 'end_panel', 'quantity' => 1,
+            'length_mm' => run['height_mm'],
+            'width_mm' => leg['modules'].map { |item| item['depth_mm'] }.max,
+            'thickness_mm' => panel['thickness_mm'],
+            'material_id' => panel['material_id'], 'grain_axis' => panel['grain_axis'],
+            'edge_band' => panel['edge_band'], 'sku' => panel['sku'] }
+        end
+      end
       [records, warnings]
     end
   end

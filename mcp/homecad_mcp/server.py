@@ -453,10 +453,16 @@ async def plan_kitchen_run(wall: dict, start_mm: float, end_mm: float,
 
 @mcp.tool(annotations=READ_ONLY_TOOL)
 async def plan_corner_kitchen_run(legs: list[dict], corner: dict,
-                                  name: str = "L-shaped kitchen run") -> dict:
+                                  name: str = "L-shaped kitchen run",
+                                  countertop: dict | None = None,
+                                  panels: dict | None = None) -> dict:
     """Plan one managed L-shaped base KitchenRun across two connected walls."""
-    return await _scene_call("plan_corner_kitchen_run",
-                             {"legs": legs, "corner": corner, "name": name})
+    params = {"legs": legs, "corner": corner, "name": name}
+    if countertop is not None:
+        params["countertop"] = countertop
+    if panels is not None:
+        params["panels"] = panels
+    return await _scene_call("plan_corner_kitchen_run", params)
 
 
 @mcp.tool(annotations=CREATE_TOOL)

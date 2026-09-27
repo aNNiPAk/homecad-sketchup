@@ -16,6 +16,7 @@ module HomeCAD
         kitchen.run.v1
         kitchen.service_zone.v1
         kitchen.corner_run.v1
+        kitchen.variants.v1
       ].freeze
 
       def self.dispatch(request, handshake_done:)

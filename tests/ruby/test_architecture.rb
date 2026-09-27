@@ -97,6 +97,7 @@ module Sketchup
     def name = ''
     def valid? = true
     def deleted? = false
+    def erase! = @parent.entities.delete(self)
     def hidden? = false
     def visible? = true
     def locked? = false

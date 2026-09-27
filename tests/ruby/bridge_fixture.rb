@@ -328,7 +328,7 @@ module Sketchup
 end
 
 module HomeCAD
-  VERSION = '0.10.0'
+  VERSION = '0.11.0'
   PROTOCOL_VERSION = 1
 end
 
@@ -336,7 +336,7 @@ root = File.expand_path('../../sketchup/homecad', __dir__)
 %w[config errors logging framing operation].each do |name|
   require File.join(root, 'runtime', name)
 end
-%w[units metadata scene targeting serializer mutation inspection measurement capture geometry primitives mutations architecture wall_attachment multi_wall_attachment project_settings furniture_data furniture furniture_presets service_zones kitchen corner_kitchen cutlist].each do |name|
+%w[units metadata scene targeting serializer mutation inspection measurement capture geometry primitives mutations architecture wall_attachment multi_wall_attachment project_settings furniture_data furniture furniture_presets service_zones kitchen kitchen_variants corner_kitchen cutlist].each do |name|
   require File.join(root, 'core', name)
 end
 require File.join(root, 'runtime', 'dispatcher')

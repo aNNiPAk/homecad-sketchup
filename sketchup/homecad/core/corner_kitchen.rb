@@ -10,7 +10,7 @@ module HomeCAD
     CORNER_KEYS = %w[mode span_first_mm span_second_mm access_leg].freeze
 
     def self.plan(model, input, exclude_id: nil, overrides: {})
-      Primitives.check_keys!(input, %w[layout_type legs corner name])
+      Primitives.check_keys!(input, %w[layout_type legs corner name countertop panels])
       legs = input['legs']
       invalid!('legs must contain exactly two ordered wall legs') unless legs.is_a?(Array) && legs.length == 2
       invalid!('leg keys must be distinct') unless legs.map { |leg| leg.is_a?(Hash) && leg['key'] }.uniq.length == 2
@@ -127,6 +127,7 @@ module HomeCAD
         'corner' => normalized_corner, 'corner_point_mm' => origin,
         'name' => name, 'bottom_mm' => plans[0].dig('plan', 'params', 'modules', 0, 'bottom_mm'),
         'height_mm' => plans[0].dig('plan', 'params', 'modules', 0, 'height_mm') }
+      KitchenVariants.normalize!(model, params, input, overrides: overrides)
       conflicts = plans.flat_map do |item|
         item['plan']['conflicts'].map { |conflict| conflict.merge('leg_key' => item['key']) }
       end
@@ -161,7 +162,10 @@ module HomeCAD
     end
 
     def self.editable(params)
+      panels = params.fetch('panels', {}).transform_values { |panel| panel.reject { |key, _| key == 'offset_mm' } }
       { 'layout_type' => 'l_shaped', 'name' => params['name'],
+        'countertop' => params.fetch('countertop', { 'enabled' => false }),
+        'panels' => panels,
         'corner' => params['corner'], 'legs' => params['legs'].map do |leg|
           leg.slice(*%w[key wall_id start_mm end_mm side modules clearance_mm
                        start_clearance_mm end_clearance_mm filler_max_mm constraints])
@@ -180,10 +184,22 @@ module HomeCAD
             'module_type' => item['type'], 'offset_mm' => position['offset_mm'],
             'wall_id' => leg['wall_id'], 'side' => leg['side']) }
         end
+        if leg['filler_mm'].positive?
+          key = "leg:#{leg['key']}/filler"
+          result[key] = { 'type' => 'kitchen.filler', 'params' => {
+            'wall_id' => leg['wall_id'], 'side' => leg['side'],
+            'width_mm' => leg['filler_mm'], 'height_mm' => params['height_mm'] } }
+        end
       end
       result['corner'] = { 'type' => params['corner']['mode'] == 'void' ?
         'kitchen.corner_void' : 'kitchen.corner_cabinet',
         'params' => params['corner'].merge('wall_ids' => params['legs'].map { |leg| leg['wall_id'] }) }
+      if params.dig('countertop', 'enabled')
+        result['countertop'] = { 'type' => 'kitchen.countertop', 'params' => params['countertop'] }
+      end
+      params.fetch('panels', {}).each do |key, panel|
+        result["panel:#{key}"] = { 'type' => 'kitchen.end_panel', 'params' => panel }
+      end
       result
     end
 
@@ -241,7 +257,7 @@ module HomeCAD
     def self.update(model, root, current, changes)
       Architecture.require_mutable!(root)
       invalid!('changes must be a nonempty object') unless changes.is_a?(Hash) && !changes.empty?
-      Primitives.check_keys!(changes, %w[legs corner name])
+      Primitives.check_keys!(changes, %w[legs corner name countertop panels])
       proposed = plan(model, editable(current).merge(changes),
         exclude_id: Metadata.read(root)['homecad_id'])
       constraint!('updated corner kitchen has conflicts') unless proposed['conflicts'].empty?
@@ -312,8 +328,32 @@ module HomeCAD
             'height_mm' => item['height_mm'], 'detail_level' => 'concept' })
           Furniture.build_geometry!(group, cabinet)
         end
+        next unless leg['filler_mm'].positive?
+
+        key = "leg:#{leg['key']}/filler"
+        last = leg['positions'].last
+        offset = last['offset_mm'] + last['width_mm']
+        group = root.entities.add_group
+        group.name = key
+        KitchenData.write_child(group, record: values['semantic_objects'].fetch(key),
+          descriptor: all_descriptors.fetch(key), run_id: run_id, wall_id: leg['wall_id'])
+        attachment = { 'wall_id' => leg['wall_id'], 'offset_mm' => offset,
+          'bottom_mm' => values['bottom_mm'], 'side' => leg['side'],
+          'clearance_mm' => leg['clearance_mm'], 'span_u_mm' => leg['filler_mm'],
+          'span_z_mm' => values['height_mm'] }
+        group.transformation = WallAttachment.wall_transform(frame, normalized['thickness_mm'],
+          attachment, wall_height_mm: normalized['height_mm'])
+        depth = leg['modules'].map { |item| item['depth_mm'] }.max
+        Kitchen.box!(group, 'filler', 0, 0, 0, leg['filler_mm'], depth, values['height_mm'])
       end
       build_corner!(model, root, values, all_descriptors.fetch('corner'), run_id)
+      if values.dig('countertop', 'enabled')
+        KitchenVariants.build_countertop!(model, root, values, all_descriptors.fetch('countertop'), run_id)
+      end
+      values.fetch('panels', {}).each_key do |key|
+        KitchenVariants.build_panel!(model, root, values, key,
+          all_descriptors.fetch("panel:#{key}"), run_id)
+      end
     end
 
     def self.build_corner!(model, root, values, descriptor, run_id)
@@ -363,16 +403,33 @@ module HomeCAD
     end
 
     def self.occupied_boxes(model, values)
-      boxes = values['legs'].flat_map do |leg|
+      boxes = values['legs'].each_with_index.flat_map do |leg, index|
         wall = Architecture.wall_entity!(model, { 'homecad_id' => leg['wall_id'] })[1]
         frame = ServiceZones.frame_from_wall(wall, side: leg['side'])
-        leg['positions'].map do |position|
+        result = leg['positions'].map do |position|
           item = leg['modules'].find { |candidate| candidate['key'] == position['key'] }
           ["leg:#{leg['key']}/module:#{item['key']}", ServiceZones.box(*frame,
             [position['offset_mm'], position['offset_mm'] + item['width_mm'],
              leg['clearance_mm'], leg['clearance_mm'] + item['depth_mm'],
              item['bottom_mm'], item['bottom_mm'] + item['height_mm']])]
         end
+        if leg['filler_mm'].positive?
+          last = leg['positions'].last
+          start = last['offset_mm'] + last['width_mm']
+          depth = leg['modules'].map { |item| item['depth_mm'] }.max
+          result << ["leg:#{leg['key']}/filler", ServiceZones.box(*frame,
+            [start, start + leg['filler_mm'], leg['clearance_mm'], leg['clearance_mm'] + depth,
+             values['bottom_mm'], values['bottom_mm'] + values['height_mm']])]
+        end
+        panel = values.fetch('panels', {})[index.zero? ? 'first' : 'second']
+        if panel
+          depth = leg['modules'].map { |item| item['depth_mm'] }.max
+          result << ["panel:#{index.zero? ? 'first' : 'second'}", ServiceZones.box(*frame,
+            [panel['offset_mm'], panel['offset_mm'] + panel['thickness_mm'],
+             leg['clearance_mm'], leg['clearance_mm'] + depth,
+             values['bottom_mm'], values['bottom_mm'] + values['height_mm']])]
+        end
+        result
       end
       first, second = values['legs']
       frames = [first, second].map do |leg|

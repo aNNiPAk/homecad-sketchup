@@ -198,6 +198,29 @@ class BridgeClient:
                 "Install a HomeCAD RBZ with L-shaped KitchenRun support and restart SketchUp.",
                 -32601,
             )
+        if BridgeClient._uses_kitchen_variants(method, params or {}) and "kitchen.variants.v1" not in capabilities:
+            raise BridgeError(
+                "unsupported_operation",
+                "SketchUp bridge does not advertise 'kitchen.variants.v1'. "
+                "Install a HomeCAD RBZ with Kitchen panel variants and restart SketchUp.",
+                -32601,
+            )
+
+    @staticmethod
+    def _uses_kitchen_variants(method: str, params: dict[str, Any]) -> bool:
+        if method == "plan_corner_kitchen_run":
+            values = params
+        elif method == "apply_kitchen_run":
+            plan = params.get("plan")
+            values = plan.get("params", {}) if isinstance(plan, dict) else {}
+        elif method == "update_kitchen_run":
+            values = params.get("changes", {})
+        else:
+            return False
+        return isinstance(values, dict) and (
+            (isinstance(values.get("countertop"), dict) and values["countertop"].get("enabled") is True)
+            or bool(values.get("panels"))
+        )
 
     @staticmethod
     def _uses_corner_run(method: str, params: dict[str, Any]) -> bool:

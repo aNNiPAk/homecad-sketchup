@@ -324,6 +324,56 @@ def test_m5_smoke_requires_disposable_model_confirmation():
     assert "--confirm-disposable" in result.stderr
 
 
+def test_m56_smoke_requires_disposable_model_confirmation():
+    result = __import__("subprocess").run(
+        [sys.executable, "scripts/smoke_m56.py"], cwd=ROOT,
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 2
+    assert "--confirm-disposable" in result.stderr
+
+
+@pytest.mark.asyncio
+async def test_m56_corner_variants_cross_language():
+    ruby = shutil.which("ruby")
+    if ruby is None:
+        pytest.skip("Ruby executable unavailable")
+    process = await asyncio.create_subprocess_exec(
+        ruby, "tests/ruby/bridge_fixture.rb", cwd=ROOT,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        port = int(await asyncio.wait_for(process.stdout.readline(), 5))
+        client = BridgeClient(Config(port=port))
+        status = await client.call("homecad_status")
+        assert "kitchen.variants.v1" in status["capabilities"]
+        ids = []
+        for endpoint in ([3000, 0, 0], [0, 3000, 0]):
+            wall = await client.call("create_wall", {"start_mm": [0, 0, 0],
+                "end_mm": endpoint, "thickness_mm": 120, "height_mm": 2700})
+            ids.append(wall["created"][0]["homecad_id"])
+        legs = [{"key": "east", "wall": {"homecad_id": ids[0]}, "start_mm": 0,
+                 "end_mm": 2200, "side": "positive_v", "modules": [
+                     {"key": "a", "type": "base_shelves", "width_mm": 600}]},
+                {"key": "north", "wall": {"homecad_id": ids[1]}, "start_mm": 0,
+                 "end_mm": 2200, "side": "negative_v", "modules": [
+                     {"key": "b", "type": "base_shelves", "width_mm": 600}]}]
+        plan = await client.call("plan_corner_kitchen_run", {"legs": legs,
+            "corner": {"mode": "void", "span_first_mm": 900, "span_second_mm": 900},
+            "countertop": {"enabled": True, "cutouts": [{"key": "sink",
+                "leg_key": "east", "offset_mm": 1100, "front_mm": 100,
+                "width_mm": 200, "depth_mm": 200}]}})
+        assert not plan["conflicts"]
+        made = await client.call("apply_kitchen_run", {"plan": plan})
+        run_id = made["created"][0]["homecad_id"]
+        schedule = await client.call("generate_cutlist", {"target": {"homecad_id": run_id}})
+        assert any(row["part_key"] == "countertop" and row["cutouts_mm"][0]["key"] == "sink"
+                   for row in schedule["records"])
+    finally:
+        process.terminate()
+        await process.wait()
+
+
 @pytest.mark.asyncio
 async def test_mcp_stdio_starts_and_lists_supported_tools():
     # No SketchUp process is required to initialize the MCP server.

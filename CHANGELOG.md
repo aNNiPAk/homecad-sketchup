@@ -4,6 +4,8 @@
 
 ### Added
 
+- M5.6 opt-in continuous L-shaped countertop with bounded rectangular cutouts, square/beveled free ends, semantic end panels, and conceptual shaped-panel cutlist records under `kitchen.variants.v1`.
+
 - M5.5 L-shaped two-Wall `kitchen.run` planning and generated void/blind-cabinet corners, multi-Wall dependency checks, stable semantic child IDs, and additive `kitchen.corner_run.v1`.
 
 - M5.4 parameter-derived, paginated Cabinet and KitchenRun cutlists with materials, grain, four edge sides, explicit hardware and honest concept-only warnings under `manufacturing.cutlist.v1`.
@@ -31,6 +33,8 @@
 - M0 bootstrap with Python MCP server, SketchUp Ruby extension, local transport, handshake, tests, and RBZ packaging.
 
 ### Changed
+
+- Bumped the matched Python/Ruby extension version to 0.11.0 for M5.6; protocol remains 1.
 
 - Bumped the matched Python/Ruby extension version to 0.10.0 for M5.5; protocol remains 1.
 

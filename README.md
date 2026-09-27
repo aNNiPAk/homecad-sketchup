@@ -119,7 +119,12 @@ may be a closed void or a concept blind cabinet with access from a selected leg.
 corner uses stable semantic HomeCAD UUIDs. Applying, updating, deleting, and Wall-driven
 regeneration keep the existing `apply_kitchen_run`/`update_kitchen_run`/`delete_kitchen_run`
 workflow and one Undo operation. The original one-Wall KitchenRun schema and tools remain
-available. M5.5 does not yet join a continuous countertop; that follows in M5.6.
+available. M5.6 adds an opt-in continuous L-shaped countertop with square or beveled free
+ends and bounded rectangular cutouts, plus semantic finish end panels. The countertop is one
+extruded shape with cutout loops. `generate_cutlist` returns a conceptual shaped-panel profile
+and end-panel material, grain and edge data; fabrication details require review. New variant
+requests require `kitchen.variants.v1`. Missing variant inputs preserve the earlier no-top
+corner behavior. The matched package/RBZ version is 0.11.0; protocol remains 1.
 
 M5 adds `kitchen.run.v1` and a two-phase workflow: `plan_kitchen_run` reads a HomeCAD Wall and returns ordered module positions, an optional bounded end filler, warnings, and conflicts without editing the model. `apply_kitchen_run` accepts that exact plan, recomputes it against the current Wall and scene, then creates one generated KitchenRun in one Undo operation. `validate_kitchen` is read-only; `update_kitchen_run` and `delete_kitchen_run` edit the semantic root. The run follows its Wall through the shared attachment projection, and primitive tools cannot edit generated Kitchen children.
 

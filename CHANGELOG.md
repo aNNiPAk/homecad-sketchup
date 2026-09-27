@@ -4,6 +4,8 @@
 
 ### Added
 
+- Component storage research comparing lossless SKP archives with HCG1 and recommending catalog metadata, compressed delivery, and a native SKP cache.
+
 - Read-only analysis of Blum Dynamic Component dictionaries, formulas, material markers, and deduplicated storage estimates for the HCG1 research.
 
 - Research-only HCG1 geometry/instance codec and benchmark report for compact Blum hardware catalogs; no HomeCAD runtime integration or third-party models are included.

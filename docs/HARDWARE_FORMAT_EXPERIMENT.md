@@ -8,6 +8,8 @@
 
 Динамические словари этих же 50 файлов разобраны отдельно в [отчёте по данным Blum](BLUM_DYNAMIC_DATA_ANALYSIS.md): повторяющиеся наборы значений тоже хорошо сжимаются, но это пока не добавляет HCG1 поведение Dynamic Components.
 
+[Сравнение форматов хранения](COMPONENT_STORAGE_RECOMMENDATION.md) дополняет опыт измерением архивов исходных SKP без потерь и рекомендацией для каталога HomeCAD.
+
 ## Образцы и способ
 
 Прочитаны 25 файлов [Blum Antaro](<../References/PLUGINS/DC_Change_Mat/Components/Выдвижные ящики/>) и 25 файлов Blum MERIVOBOX из того же каталога. Исходные модели не менялись. [Исследовательский конвертер](../scripts/research/hardware_codec.py) использует установленную библиотеку SketchUp C API для чтения граней, отдельных рёбер, групп, экземпляров компонентов и их преобразований. Геометрию граней он получает через [`SUMeshHelper`](https://extensions.sketchup.com/developers/sketchup_c_api/sketchup/struct_s_u_mesh_helper_ref.html), а вложенность — через [`SUEntities`](https://extensions.sketchup.com/developers/sketchup_c_api/sketchup/struct_s_u_entities_ref.html).

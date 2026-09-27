@@ -4,6 +4,8 @@
 
 ### Added
 
+- M5.4 parameter-derived, paginated Cabinet and KitchenRun cutlists with materials, grain, four edge sides, explicit hardware and honest concept-only warnings under `manufacturing.cutlist.v1`.
+
 - M5.3 project-level Cabinet defaults and an original versioned Cabinet preset catalog with explicit overrides and atomic dependent regeneration under `project.defaults.v1` and `furniture.presets.v1`.
 
 - M5.2 optional full-volume Kitchen service clearances in six directions, with cross-wall HomeCAD obstacle checks, cut-aware Walls, read-only structured findings, and an opt-in blocking constraint under `kitchen.service_zone.v1`.
@@ -27,6 +29,8 @@
 - M0 bootstrap with Python MCP server, SketchUp Ruby extension, local transport, handshake, tests, and RBZ packaging.
 
 ### Changed
+
+- Bumped the matched Python/Ruby extension version to 0.9.0 for M5.4; protocol remains 1.
 
 - Bumped the matched Python/Ruby extension version to 0.8.0 for M5.3; protocol remains 1.
 

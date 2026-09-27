@@ -358,7 +358,9 @@ async def create_cabinet(width_mm: float, depth_mm: float, height_mm: float,
                          panel_thickness_mm: float = 18, back_thickness_mm: float = 4,
                          shelf_z_mm: list[float] | None = None, fronts: list[dict] | None = None,
                          detail_level: str = "construction", placement: dict | None = None,
-                         name: str = "Cabinet") -> dict:
+                         name: str = "Cabinet", material_id: str | None = None,
+                         front_material_id: str | None = None,
+                         manufacturing: dict | None = None) -> dict:
     """Create a parametric Cabinet; all dimensions and coordinates are millimeters."""
     params = {"width_mm": width_mm, "depth_mm": depth_mm, "height_mm": height_mm,
               "panel_thickness_mm": panel_thickness_mm, "back_thickness_mm": back_thickness_mm,
@@ -366,6 +368,12 @@ async def create_cabinet(width_mm: float, depth_mm: float, height_mm: float,
               "detail_level": detail_level, "name": name}
     if placement is not None:
         params["placement"] = placement
+    if material_id is not None:
+        params["material_id"] = material_id
+    if front_material_id is not None:
+        params["front_material_id"] = front_material_id
+    if manufacturing is not None:
+        params["manufacturing"] = manufacturing
     return await _scene_call("create_cabinet", params)
 
 
@@ -410,6 +418,13 @@ async def create_cabinet_from_preset(preset_id: str, overrides: dict | None = No
     """Create one managed Cabinet from a versioned preset and explicit overrides."""
     return await _scene_call("create_cabinet_from_preset",
                              {"preset_id": preset_id, "overrides": overrides or {}})
+
+
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def generate_cutlist(target: dict, limit: int = 50, offset: int = 0) -> dict:
+    """Return a bounded parameter-derived Cabinet or KitchenRun part schedule in millimeters."""
+    return await _scene_call("generate_cutlist",
+                             {"target": target, "limit": limit, "offset": offset})
 
 
 @mcp.tool(annotations=READ_ONLY_TOOL)

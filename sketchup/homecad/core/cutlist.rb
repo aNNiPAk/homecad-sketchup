@@ -1,0 +1,78 @@
+module HomeCAD
+  module Cutlist
+    MAX_LIMIT = 100
+
+    def self.generate(model, request)
+      Primitives.check_keys!(request, %w[target limit offset])
+      entry = Targeting.resolve_one(model, request['target'])
+      entity = entry.entity
+      type = Metadata.read(entity)['type']
+      unless entry.parent.nil? && %w[furniture.cabinet kitchen.run].include?(type)
+        raise Runtime::BridgeError.new(-32008, 'constraint_violation',
+          'cutlist target must be a root Cabinet or KitchenRun')
+      end
+      limit = request.fetch('limit', 50)
+      offset = request.fetch('offset', 0)
+      unless limit.is_a?(Integer) && (1..MAX_LIMIT).cover?(limit) &&
+             offset.is_a?(Integer) && offset >= 0
+        raise Runtime::BridgeError.new(-32602, 'invalid_request',
+          "limit must be 1..#{MAX_LIMIT} and offset must be nonnegative")
+      end
+      records, warnings = if type == 'furniture.cabinet'
+        params = FurnitureData.read_params(entity)
+        [records_for(params, Metadata.read(entity)['homecad_id'], type), []]
+      else
+        kitchen_records(model, KitchenData.read(entity))
+      end
+      { 'target' => Serializer.serialize(entry, level: 'summary')['identity'],
+        'records' => records.slice(offset, limit) || [], 'total' => records.length,
+        'limit' => limit, 'offset' => offset, 'has_more' => offset + limit < records.length,
+        'warnings' => warnings, 'units' => 'mm' }
+    end
+
+    def self.records_for(params, object_id, type, prefix: nil)
+      parts = Furniture.part_schedule(params).map do |part|
+        { 'record_kind' => 'panel', 'source_object_id' => object_id,
+          'source_type' => type, 'part_key' => [prefix, part['part_key']].compact.join('/'),
+          'part_kind' => part['part_kind'], 'quantity' => part['quantity'],
+          'length_mm' => part['length_mm'], 'width_mm' => part['width_mm'],
+          'thickness_mm' => part['thickness_mm'], 'material_id' => part['material_id'],
+          'grain_axis' => part['grain_axis'], 'edge_band' => part['edge_band'],
+          'sku' => part['sku'] }
+      end
+      hardware = params.fetch('manufacturing', {}).fetch('hardware', []).map do |item|
+        { 'record_kind' => 'hardware', 'source_object_id' => object_id,
+          'source_type' => type, 'part_key' => [prefix, "hardware:#{item['key']}"].compact.join('/'),
+          'part_kind' => 'hardware', 'quantity' => item['quantity'],
+          'length_mm' => nil, 'width_mm' => nil, 'thickness_mm' => nil,
+          'material_id' => nil, 'grain_axis' => nil, 'edge_band' => nil,
+          'sku' => item['sku'] }
+      end
+      parts + hardware
+    end
+
+    def self.kitchen_records(model, run)
+      records = []
+      warnings = []
+      run['modules'].each do |item|
+        if Kitchen::APPLIANCE_TYPES.include?(item['type'])
+          warnings << "module #{item['key']} is a concept appliance; no manufacturing parts inferred"
+          next
+        end
+        if %w[sink base_drawers].include?(item['type'])
+          warnings << "module #{item['key']} has concept-only internal details; schedule covers the generic carcass"
+        end
+        params = Furniture.validate_params!(model, {
+          'width_mm' => item['width_mm'], 'depth_mm' => item['depth_mm'],
+          'height_mm' => item['height_mm'], 'detail_level' => 'construction',
+          'material_id' => item['material_id'], 'front_material_id' => item['front_material_id'],
+          'manufacturing' => item.fetch('manufacturing', {})
+        })
+        key = "module:#{item['key']}"
+        object_id = run.fetch('semantic_objects', {}).fetch(key, {})['homecad_id']
+        records.concat(records_for(params, object_id, 'kitchen.module', prefix: key))
+      end
+      [records, warnings]
+    end
+  end
+end

@@ -28,6 +28,7 @@ async def test_mcp_tools_expose_mutation_schemas_and_annotations():
                      "get_project_settings", "update_project_settings",
                      "list_furniture_presets", "get_furniture_preset",
                      "create_cabinet_from_preset",
+                     "generate_cutlist",
                      "plan_kitchen_run", "apply_kitchen_run", "validate_kitchen",
                      "update_kitchen_run", "delete_kitchen_run"}
     read_only = {"homecad_status", "get_model_info", "list_objects", "find_objects",
@@ -38,7 +39,8 @@ async def test_mcp_tools_expose_mutation_schemas_and_annotations():
     for name in {"get_wall_frame", "detect_rooms"}:
         assert tools[name].annotations.readOnlyHint is True
     for name in {"get_furniture_frame", "list_furniture_parts", "plan_kitchen_run", "validate_kitchen",
-                 "get_project_settings", "list_furniture_presets", "get_furniture_preset"}:
+                 "get_project_settings", "list_furniture_presets", "get_furniture_preset",
+                 "generate_cutlist"}:
         assert tools[name].annotations.readOnlyHint is True
     create_tools = {"create_group", "create_face", "create_edge", "create_box", "create_circle",
                     "create_arc", "create_polygon", "boolean_operation"}
@@ -259,13 +261,18 @@ def test_project_defaults_and_preset_methods_require_separate_capabilities():
                    "list_furniture_presets", "get_furniture_preset",
                    "create_cabinet_from_preset"):
         BridgeClient._check_method_capability(method, new)
+    with pytest.raises(BridgeError, match="manufacturing.cutlist.v1"):
+        BridgeClient._check_method_capability("generate_cutlist", new)
+    BridgeClient._check_method_capability("generate_cutlist", {
+        **new, "capabilities": new["capabilities"] + ["manufacturing.cutlist.v1"]
+    })
 
 
 @pytest.mark.asyncio
 async def test_project_defaults_and_presets_forward_parameters(monkeypatch):
     from homecad_mcp.server import (get_project_settings, update_project_settings,
                                     list_furniture_presets, get_furniture_preset,
-                                    create_cabinet_from_preset)
+                                    create_cabinet_from_preset, generate_cutlist)
     calls = []
 
     async def fake(method, params):
@@ -278,6 +285,7 @@ async def test_project_defaults_and_presets_forward_parameters(monkeypatch):
     await list_furniture_presets()
     await get_furniture_preset("base_open.v1")
     await create_cabinet_from_preset("base_open.v1", {"width_mm": 700})
+    await generate_cutlist({"homecad_id": "cabinet"}, limit=10, offset=2)
     assert calls == [
         ("get_project_settings", {}),
         ("update_project_settings", {"changes": {"panel_thickness_mm": 20}}),
@@ -285,6 +293,8 @@ async def test_project_defaults_and_presets_forward_parameters(monkeypatch):
         ("get_furniture_preset", {"preset_id": "base_open.v1"}),
         ("create_cabinet_from_preset", {"preset_id": "base_open.v1",
                                         "overrides": {"width_mm": 700}}),
+        ("generate_cutlist", {"target": {"homecad_id": "cabinet"},
+                              "limit": 10, "offset": 2}),
     ]
 
 

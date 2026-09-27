@@ -11,6 +11,7 @@ module HomeCAD
         architecture.core.v1
         furniture.core.v1
         furniture.presets.v1
+        manufacturing.cutlist.v1
         project.defaults.v1
         kitchen.run.v1
         kitchen.service_zone.v1
@@ -61,6 +62,7 @@ module HomeCAD
           preset_params, source = FurniturePresets.resolve(active_model!, params['preset_id'],
             params.fetch('overrides', {}))
           Furniture.create_cabinet(active_model!, preset_params, source: source)
+        when 'generate_cutlist' then Cutlist.generate(active_model!, params)
         when 'plan_kitchen_run', 'apply_kitchen_run', 'validate_kitchen',
              'update_kitchen_run', 'delete_kitchen_run'
           Kitchen.dispatch(active_model!, method, params)

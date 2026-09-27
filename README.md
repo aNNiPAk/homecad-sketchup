@@ -105,6 +105,14 @@ explicit values. An invalid default change is rejected before SketchUp Undo star
 updates all affected Cabinets in one Undo operation. Kitchen appliance service clearances remain
 explicit per module.
 
+M5.4 adds read-only `generate_cutlist(target,limit,offset)` for Cabinet and KitchenRun.
+Cabinet part records derive from canonical parameters and include cut length/width/thickness,
+material ID, grain axis, four edge-band sides, optional SKU and quantity. Explicit hardware
+records are included; unspecified materials and SKUs remain null. Kitchen modules produce
+generic carcass records where possible. Concept appliances produce a warning and no invented
+manufacturing parts. Results are bounded to 100 records per call and do not depend on SketchUp
+child entity IDs or current Furniture detail level.
+
 M5 adds `kitchen.run.v1` and a two-phase workflow: `plan_kitchen_run` reads a HomeCAD Wall and returns ordered module positions, an optional bounded end filler, warnings, and conflicts without editing the model. `apply_kitchen_run` accepts that exact plan, recomputes it against the current Wall and scene, then creates one generated KitchenRun in one Undo operation. `validate_kitchen` is read-only; `update_kitchen_run` and `delete_kitchen_run` edit the semantic root. The run follows its Wall through the shared attachment projection, and primitive tools cannot edit generated Kitchen children.
 
 Each straight run has one tier: base, wall, or tall. Base modules include shelves, drawers, sink, hob, dishwasher, and oven; tall modules include storage and fridge; wall modules include shelves and lift front. Appliance and sink/hob geometry is conceptual. A base run may generate a single straight countertop, plinth, and end filler. All placement lengths are millimeters in the Wall U frame. The planner accepts separate start/end clearances and explicit coverage, countertop, opening-clearance, and depth constraints. See [the M5 contract](tests/contracts/m5.md) and [M5 decisions](docs/M5_DECISIONS.md) for module schemas and current limitations.

@@ -34,7 +34,8 @@ module HomeCAD
     DETAIL_LEVELS = %w[concept construction].freeze
     TYPES = %w[furniture.cabinet].freeze
     CREATE_KEYS = %w[width_mm depth_mm height_mm panel_thickness_mm back_thickness_mm
-                     shelf_z_mm fronts detail_level placement name material_id front_material_id].freeze
+                     shelf_z_mm fronts detail_level placement name material_id front_material_id
+                     manufacturing].freeze
     CHANGE_KEYS = (CREATE_KEYS - ['name'] + ['name']).freeze
     TOLERANCE_MM = 0.01
 
@@ -79,7 +80,59 @@ module HomeCAD
         invalid!("#{key} must be null or a nonempty identifier up to 128 characters") unless
           value.nil? || (value.is_a?(String) && !value.strip.empty? && value.length <= 128)
       end
+      values['manufacturing'] = validate_manufacturing!(values['manufacturing'], values) if
+        values.key?('manufacturing')
       values
+    end
+
+    def self.validate_manufacturing!(input, params)
+      invalid!('manufacturing must be an object') unless input.is_a?(Hash)
+      Primitives.check_keys!(input, %w[parts hardware])
+      parts = input.fetch('parts', {})
+      hardware = input.fetch('hardware', [])
+      invalid!('manufacturing.parts must be an object') unless parts.is_a?(Hash)
+      invalid!('manufacturing.hardware must be an array of at most 128 entries') unless
+        hardware.is_a?(Array) && hardware.length <= 128
+      known_keys = raw_part_schedule(params).map { |part| part['part_key'] }
+      invalid!("unknown manufacturing part keys: #{(parts.keys - known_keys).join(', ')}") unless
+        (parts.keys - known_keys).empty?
+      normalized_parts = parts.to_h do |key, value|
+        invalid!("manufacturing.parts.#{key} must be an object") unless value.is_a?(Hash)
+        Primitives.check_keys!(value, %w[material_id grain_axis edge_band sku])
+        material = validate_identifier(value['material_id'], "manufacturing.parts.#{key}.material_id")
+        grain = value['grain_axis']
+        invalid!("manufacturing.parts.#{key}.grain_axis is invalid") unless
+          grain.nil? || %w[length width none].include?(grain)
+        sku = validate_identifier(value['sku'], "manufacturing.parts.#{key}.sku")
+        edges = value.fetch('edge_band', {})
+        invalid!("manufacturing.parts.#{key}.edge_band must be an object") unless edges.is_a?(Hash)
+        edge_keys = %w[length_start length_end width_start width_end]
+        Primitives.check_keys!(edges, edge_keys)
+        [key, { 'material_id' => material, 'grain_axis' => grain, 'sku' => sku,
+          'edge_band' => edge_keys.to_h { |side| [side,
+            validate_identifier(edges[side], "manufacturing.parts.#{key}.edge_band.#{side}")] } }]
+      end
+      seen = []
+      normalized_hardware = hardware.map do |item|
+        invalid!('hardware entries must be objects') unless item.is_a?(Hash)
+        Primitives.check_keys!(item, %w[key sku quantity])
+        key = validate_identifier(item['key'], 'hardware.key')
+        sku = validate_identifier(item['sku'], 'hardware.sku')
+        invalid!('hardware key and sku are required') if key.nil? || sku.nil?
+        invalid!('hardware keys must be unique') if seen.include?(key)
+        seen << key
+        quantity = item['quantity']
+        invalid!('hardware quantity must be an integer in 1..10000') unless
+          quantity.is_a?(Integer) && (1..10_000).cover?(quantity)
+        { 'key' => key, 'sku' => sku, 'quantity' => quantity }
+      end
+      { 'parts' => normalized_parts, 'hardware' => normalized_hardware }
+    end
+
+    def self.validate_identifier(value, label)
+      invalid!("#{label} must be null or a nonempty identifier up to 128 characters") unless
+        value.nil? || (value.is_a?(String) && !value.strip.empty? && value.length <= 128)
+      value
     end
 
     def self.validate_shelves!(shelves, params)
@@ -190,7 +243,7 @@ module HomeCAD
         Geom::Vector3d.new(*frame.x_axis), Geom::Vector3d.new(*frame.y_axis), Geom::Vector3d.new(*frame.z_axis))
     end
 
-    def self.part_schedule(params)
+    def self.raw_part_schedule(params)
       width = params['width_mm']; depth = params['depth_mm']; height = params['height_mm']
       panel = params['panel_thickness_mm']; back = params['back_thickness_mm']
       parts = [
@@ -224,6 +277,22 @@ module HomeCAD
           'hinge' => front['hinge'] }
       end
       parts
+    end
+
+    def self.part_schedule(params)
+      options = params.fetch('manufacturing', {}).fetch('parts', {})
+      raw_part_schedule(params).map do |part|
+        override = options.fetch(part['part_key'], {})
+        default_material = part['part_key'].start_with?('front:') ?
+          params.fetch('front_material_id', nil) : params.fetch('material_id', nil)
+        part.merge('length_mm' => part['height_mm'],
+          'material_id' => override.key?('material_id') ? override['material_id'] : default_material,
+          'grain_axis' => override.fetch('grain_axis', nil),
+          'edge_band' => %w[length_start length_end width_start width_end].to_h do |side|
+            [side, override.fetch('edge_band', {})[side]]
+          end,
+          'sku' => override.fetch('sku', nil))
+      end
     end
 
     def self.build_geometry!(group, params)

@@ -108,7 +108,8 @@ module HomeCAD
       seen = []
       normalized = modules.map.with_index do |item, index|
         invalid!("modules[#{index}] must be an object") unless item.is_a?(Hash)
-        Primitives.check_keys!(item, %w[key type width_mm depth_mm height_mm bottom_mm service_clearance_mm])
+        Primitives.check_keys!(item, %w[key type width_mm depth_mm height_mm bottom_mm
+                                       service_clearance_mm material_id front_material_id manufacturing])
         kind = item['type']
         invalid!("unsupported module type: #{kind.inspect}") unless TYPES.key?(kind)
         current_tier = TYPES[kind]
@@ -126,6 +127,16 @@ module HomeCAD
         constraint!('module width and height must exceed 36 mm for the Cabinet case') if width <= 36 || height <= 36
         value = { 'key' => key, 'type' => kind, 'width_mm' => width,
           'depth_mm' => depth, 'height_mm' => height, 'bottom_mm' => bottom }
+        %w[material_id front_material_id].each do |field|
+          value[field] = Furniture.validate_identifier(item[field], "modules[#{index}].#{field}") if item.key?(field)
+        end
+        if item.key?('manufacturing')
+          cabinet = Furniture.validate_params!(model, {
+            'width_mm' => width, 'depth_mm' => depth, 'height_mm' => height,
+            'manufacturing' => item['manufacturing']
+          })
+          value['manufacturing'] = cabinet['manufacturing']
+        end
         if item.key?('service_clearance_mm')
           service = item['service_clearance_mm']
           invalid!('service_clearance_mm must be an object') unless service.is_a?(Hash)

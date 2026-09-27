@@ -54,6 +54,7 @@ METHOD_CAPABILITIES = {
     "list_furniture_presets": "furniture.presets.v1",
     "get_furniture_preset": "furniture.presets.v1",
     "create_cabinet_from_preset": "furniture.presets.v1",
+    "generate_cutlist": "manufacturing.cutlist.v1",
     "plan_kitchen_run": "kitchen.run.v1",
     "apply_kitchen_run": "kitchen.run.v1",
     "validate_kitchen": "kitchen.run.v1",

@@ -9,7 +9,8 @@ OUTPUT = ROOT / "dist" / "homecad.rbz"
 
 
 def build() -> Path:
-    files = [SOURCE / "homecad.rb", *sorted((SOURCE / "homecad").rglob("*.rb"))]
+    files = [SOURCE / "homecad.rb", *sorted((SOURCE / "homecad").rglob("*.rb")),
+             *sorted((SOURCE / "homecad" / "catalog").rglob("*.json"))]
     OUTPUT.parent.mkdir(exist_ok=True)
     with ZipFile(OUTPUT, "w", ZIP_DEFLATED) as archive:
         for path in files:

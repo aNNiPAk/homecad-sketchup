@@ -46,6 +46,8 @@ METHOD_CAPABILITIES = {
     "detect_rooms": "architecture.core.v1",
     "get_furniture_frame": "furniture.core.v1",
     "list_furniture_parts": "furniture.core.v1",
+    "list_hardware_catalog": "furniture.hardware.v1",
+    "plan_cabinet_drawer": "furniture.hardware.v1",
     "create_cabinet": "furniture.core.v1",
     "update_furniture_object": "furniture.core.v1",
     "delete_furniture_object": "furniture.core.v1",
@@ -205,6 +207,23 @@ class BridgeClient:
                 "Install a HomeCAD RBZ with Kitchen panel variants and restart SketchUp.",
                 -32601,
             )
+        if BridgeClient._uses_cabinet_drawers(method, params or {}) and "furniture.hardware.v1" not in capabilities:
+            raise BridgeError(
+                "unsupported_operation",
+                "SketchUp bridge does not advertise 'furniture.hardware.v1'. "
+                "Install a HomeCAD RBZ with drawer assembly support and restart SketchUp.",
+                -32601,
+            )
+
+    @staticmethod
+    def _uses_cabinet_drawers(method: str, params: dict[str, Any]) -> bool:
+        if method == "create_cabinet":
+            return "drawers" in params
+        if method == "update_furniture_object":
+            return isinstance(params.get("changes"), dict) and "drawers" in params["changes"]
+        if method == "create_cabinet_from_preset":
+            return isinstance(params.get("overrides"), dict) and "drawers" in params["overrides"]
+        return False
 
     @staticmethod
     def _uses_kitchen_variants(method: str, params: dict[str, Any]) -> bool:

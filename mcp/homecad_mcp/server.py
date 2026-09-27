@@ -353,6 +353,18 @@ async def list_furniture_parts(target: dict) -> dict:
     return await _scene_call("list_furniture_parts", {"target": target})
 
 
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def list_hardware_catalog() -> dict:
+    """List versioned HomeCAD hardware families and their required selections."""
+    return await _scene_call("list_hardware_catalog", {})
+
+
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def plan_cabinet_drawer(target: dict, drawer: dict) -> dict:
+    """Validate one proposed wood drawer and preview its panel and slide records."""
+    return await _scene_call("plan_cabinet_drawer", {"target": target, "drawer": drawer})
+
+
 @mcp.tool(annotations=CREATE_TOOL)
 async def create_cabinet(width_mm: float, depth_mm: float, height_mm: float,
                          panel_thickness_mm: float = 18, back_thickness_mm: float = 4,
@@ -360,7 +372,8 @@ async def create_cabinet(width_mm: float, depth_mm: float, height_mm: float,
                          detail_level: str = "construction", placement: dict | None = None,
                          name: str = "Cabinet", material_id: str | None = None,
                          front_material_id: str | None = None,
-                         manufacturing: dict | None = None) -> dict:
+                          manufacturing: dict | None = None,
+                          drawers: list[dict] | None = None) -> dict:
     """Create a parametric Cabinet; all dimensions and coordinates are millimeters."""
     params = {"width_mm": width_mm, "depth_mm": depth_mm, "height_mm": height_mm,
               "panel_thickness_mm": panel_thickness_mm, "back_thickness_mm": back_thickness_mm,
@@ -374,6 +387,8 @@ async def create_cabinet(width_mm: float, depth_mm: float, height_mm: float,
         params["front_material_id"] = front_material_id
     if manufacturing is not None:
         params["manufacturing"] = manufacturing
+    if drawers is not None:
+        params["drawers"] = drawers
     return await _scene_call("create_cabinet", params)
 
 

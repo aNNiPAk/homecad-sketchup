@@ -4,6 +4,8 @@
 
 ### Added
 
+- M5.7 original versioned hardware catalog, read-only drawer planning, generic wooden drawer panels within Cabinet, and explicit slide-pair cutlist records under `furniture.hardware.v1`.
+
 - Hardware research report consolidating catalog findings, dynamic data, manufacturer calculation examples, and the direction for an original parametric HomeCAD library.
 
 - Component storage research comparing lossless SKP archives with HCG1 and recommending catalog metadata, compressed delivery, and a native SKP cache.
@@ -41,6 +43,8 @@
 - M0 bootstrap with Python MCP server, SketchUp Ruby extension, local transport, handshake, tests, and RBZ packaging.
 
 ### Changed
+
+- Bumped matched Python/Ruby extension version to 0.12.0 for M5.7; protocol remains 1.
 
 - Bumped the matched Python/Ruby extension version to 0.11.0 for M5.6; protocol remains 1.
 

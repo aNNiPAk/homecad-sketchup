@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "families": [
+    {
+      "id": "homecad.wood_drawer.slide_pair.v1",
+      "name": "Wood drawer slide pair",
+      "kind": "drawer_slide",
+      "unit": "pair",
+      "quantity_per_assembly": 1,
+      "compatible_assembly": "wood_drawer",
+      "required_selection": ["sku", "nominal_length_mm", "side_clearance_mm"],
+      "source": "HomeCAD original generic assembly rule",
+      "geometry": "concept_only"
+    }
+  ]
+}

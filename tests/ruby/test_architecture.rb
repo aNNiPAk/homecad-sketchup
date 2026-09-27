@@ -210,7 +210,7 @@ root = File.expand_path('../../sketchup/homecad', __dir__)
 %w[units metadata scene targeting serializer mutation geometry primitives architecture].each do |name|
   require File.join(root, 'core', name)
 end
-%w[wall_attachment multi_wall_attachment furniture_data furniture].each do |name|
+%w[wall_attachment multi_wall_attachment furniture_data hardware_catalog drawer_hardware furniture].each do |name|
   require File.join(root, 'core', name)
 end
 

@@ -48,7 +48,7 @@ module HomeCAD
           'material_id' => nil, 'grain_axis' => nil, 'edge_band' => nil,
           'sku' => item['sku'] }
       end
-      parts + hardware
+      parts + hardware + DrawerHardware.hardware_records(params, object_id, type, prefix: prefix)
     end
 
     def self.kitchen_records(model, run)

@@ -23,7 +23,8 @@ async def test_mcp_tools_expose_mutation_schemas_and_annotations():
                      "create_wall", "create_opening", "create_door", "create_window",
                      "create_niche", "create_column", "update_architecture_object",
                      "delete_architecture_object", "create_room", "detect_rooms",
-                     "get_furniture_frame", "list_furniture_parts", "create_cabinet",
+                     "get_furniture_frame", "list_furniture_parts", "list_hardware_catalog",
+                     "plan_cabinet_drawer", "create_cabinet",
                      "update_furniture_object", "delete_furniture_object",
                      "get_project_settings", "update_project_settings",
                      "list_furniture_presets", "get_furniture_preset",
@@ -39,7 +40,8 @@ async def test_mcp_tools_expose_mutation_schemas_and_annotations():
         assert tools[name].annotations.openWorldHint is False
     for name in {"get_wall_frame", "detect_rooms"}:
         assert tools[name].annotations.readOnlyHint is True
-    for name in {"get_furniture_frame", "list_furniture_parts", "plan_kitchen_run",
+    for name in {"get_furniture_frame", "list_furniture_parts", "list_hardware_catalog",
+                 "plan_cabinet_drawer", "plan_kitchen_run",
                  "plan_corner_kitchen_run", "validate_kitchen",
                  "get_project_settings", "list_furniture_presets", "get_furniture_preset",
                  "generate_cutlist"}:
@@ -313,6 +315,45 @@ async def test_corner_variant_parameters_forwarded(monkeypatch):
                                   panels={"first": {"thickness_mm": 18}})
     assert calls[0][1]["countertop"]["enabled"] is True
     assert calls[0][1]["panels"]["first"]["thickness_mm"] == 18
+
+
+def test_drawer_capability_is_required_only_for_new_requests():
+    old = {"capabilities": ["furniture.core.v1", "furniture.presets.v1"]}
+    new = {"capabilities": old["capabilities"] + ["furniture.hardware.v1"]}
+    BridgeClient._check_method_capability("create_cabinet", old, {"width_mm": 600})
+    BridgeClient._check_method_capability("update_furniture_object", old,
+        {"changes": {"name": "Old Cabinet"}})
+    for method, params in [
+        ("list_hardware_catalog", {}),
+        ("plan_cabinet_drawer", {"target": {}, "drawer": {}}),
+        ("create_cabinet", {"drawers": []}),
+        ("update_furniture_object", {"changes": {"drawers": []}}),
+        ("create_cabinet_from_preset", {"overrides": {"drawers": []}}),
+    ]:
+        with pytest.raises(BridgeError, match="furniture.hardware.v1"):
+            BridgeClient._check_method_capability(method, old, params)
+        BridgeClient._check_method_capability(method, new, params)
+
+
+@pytest.mark.asyncio
+async def test_drawer_tools_forward_parameters(monkeypatch):
+    from homecad_mcp.server import (list_hardware_catalog, plan_cabinet_drawer,
+                                    create_cabinet)
+    calls = []
+
+    async def fake(method, params):
+        calls.append((method, params))
+        return {"status": "success"}
+
+    monkeypatch.setattr("homecad_mcp.server._scene_call", fake)
+    drawer = {"key": "upper", "front_key": "front"}
+    await list_hardware_catalog()
+    await plan_cabinet_drawer({"homecad_id": "cabinet"}, drawer)
+    await create_cabinet(600, 560, 720, drawers=[drawer])
+    assert calls[0] == ("list_hardware_catalog", {})
+    assert calls[1] == ("plan_cabinet_drawer",
+                        {"target": {"homecad_id": "cabinet"}, "drawer": drawer})
+    assert calls[2][1]["drawers"] == [drawer]
 
 
 def test_project_defaults_and_preset_methods_require_separate_capabilities():

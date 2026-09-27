@@ -16,10 +16,12 @@ def test_rbz_contains_loader_and_matching_support_folder():
             "scene", "targeting", "serializer", "inspection", "measurement", "capture",
             "metadata", "mutation", "geometry", "primitives", "mutations", "architecture",
             "wall_attachment", "project_settings", "furniture_data", "furniture",
-            "furniture_presets", "service_zones", "kitchen", "cutlist",
+            "furniture_presets", "hardware_catalog", "drawer_hardware",
+            "service_zones", "kitchen", "cutlist",
             "multi_wall_attachment", "corner_kitchen", "kitchen_variants",
         }
         assert {f"homecad/core/{name}.rb" for name in required_core_files} <= names
+        assert "homecad/catalog/hardware.json" in names
         assert all(name == "homecad.rb" or name.startswith("homecad/") for name in names)
         assert not any(name.startswith(("scripts/", ".homecad-dev/")) for name in names)
         assert f"EXTENSION.version = '{VERSION}'" in archive.read("homecad.rb").decode()

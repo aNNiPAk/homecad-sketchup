@@ -35,7 +35,7 @@ module HomeCAD
     TYPES = %w[furniture.cabinet].freeze
     CREATE_KEYS = %w[width_mm depth_mm height_mm panel_thickness_mm back_thickness_mm
                      shelf_z_mm fronts detail_level placement name material_id front_material_id
-                     manufacturing].freeze
+                      manufacturing drawers].freeze
     CHANGE_KEYS = (CREATE_KEYS - ['name'] + ['name']).freeze
     TOLERANCE_MM = 0.01
 
@@ -43,6 +43,8 @@ module HomeCAD
       case method
       when 'get_furniture_frame' then get_frame(model, params)
       when 'list_furniture_parts' then list_parts(model, params)
+      when 'list_hardware_catalog' then HardwareCatalog.list(model, params)
+      when 'plan_cabinet_drawer' then plan_drawer(model, params)
       when 'create_cabinet' then create_cabinet(model, params)
       when 'update_furniture_object' then update_object(model, params)
       when 'delete_furniture_object' then delete_object(model, params)
@@ -64,6 +66,7 @@ module HomeCAD
       constraint!('back_thickness_mm must be less than cabinet depth') if values['back_thickness_mm'] >= values['depth_mm']
       values['shelf_z_mm'] = validate_shelves!(values.fetch('shelf_z_mm', []), values)
       values['fronts'] = validate_fronts!(values.fetch('fronts', []), values)
+      DrawerHardware.normalize!(values) if values.key?('drawers')
       values['detail_level'] = values.fetch('detail_level', 'construction')
       invalid!('detail_level must be concept or construction') unless DETAIL_LEVELS.include?(values['detail_level'])
       values['name'] = values.fetch('name', 'Cabinet')
@@ -276,7 +279,7 @@ module HomeCAD
           'thickness_mm' => front['thickness_mm'], 'origin_mm' => [front['x_mm'], depth, front['z_mm']],
           'hinge' => front['hinge'] }
       end
-      parts
+      parts + DrawerHardware.parts(params)
     end
 
     def self.part_schedule(params)
@@ -340,12 +343,14 @@ module HomeCAD
       collection.set_attribute(dictionary, 'part_kind', part['part_kind'])
       x, y, z = part['origin_mm']
       sx = part['width_mm']; sy = part['height_mm']; sz = part['thickness_mm']
-      if part['part_key'].end_with?('_side')
+      if part['part_kind'] == 'drawer_side'
+        sx, sy, sz = part['thickness_mm'], part['width_mm'], part['height_mm']
+      elsif part['part_key'].end_with?('_side')
         # Side panel plane is X/Z; its depth dimension occupies local Y.
         sx, sy, sz = part['thickness_mm'], part['width_mm'], part['height_mm']
         x = part['part_key'] == 'right_side' ? root_width_mm(root) - part['thickness_mm'] : 0.0
         y = 0.0; z = 0.0
-      elsif part['part_key'] == 'bottom' || part['part_key'] == 'top'
+      elsif part['part_kind'] == 'drawer_base' || part['part_key'] == 'bottom' || part['part_key'] == 'top'
         sx, sy, sz = part['width_mm'], part['height_mm'], part['thickness_mm']
       elsif part['part_key'] == 'back'
         sx, sy, sz = part['width_mm'], part['thickness_mm'], part['height_mm']
@@ -392,6 +397,27 @@ module HomeCAD
         'count' => part_schedule(values).length, 'units' => 'mm' }
     end
 
+    def self.plan_drawer(model, params)
+      Primitives.check_keys!(params, %w[target drawer])
+      entity, current = resolve_cabinet(model, params['target'])
+      drawer = params['drawer']
+      invalid!('drawer must be an object') unless drawer.is_a?(Hash)
+      existing = current.fetch('drawers', [])
+      proposed = validate_params!(model, { 'drawers' => existing + [drawer] }, defaults: current)
+      normalized = proposed['drawers'].last
+      prefix = "drawer:#{normalized['key']}/"
+      parts = part_schedule(proposed).select { |part| part['part_key'].start_with?(prefix) }
+      hardware = DrawerHardware.hardware_records(proposed,
+        Metadata.read(entity)['homecad_id'], 'furniture.cabinet').select do |record|
+          record['part_key'].start_with?(prefix)
+        end
+      { 'status' => 'valid', 'cabinet_id' => Metadata.read(entity)['homecad_id'],
+        'cabinet_revision' => Metadata.read(entity)['revision'],
+        'drawer' => normalized, 'parts' => parts, 'hardware' => hardware,
+        'warnings' => ['generic wooden drawer; joinery and mounting positions require fabrication review'],
+        'units' => 'mm' }
+    end
+
     def self.create_cabinet(model, params, options = {})
       Primitives.check_keys!(params, CREATE_KEYS)
       values = validate_params!(model, params)
@@ -434,7 +460,7 @@ module HomeCAD
         FurnitureData.canonical(FurnitureData.read_source(entity)) != FurnitureData.canonical(source)
       return mutation_result('update_furniture_object', updated: [entity], revision: Metadata.read(entity)['revision']) unless domain_state_changed
 
-      geometry_changed = %w[width_mm depth_mm height_mm panel_thickness_mm back_thickness_mm shelf_z_mm fronts detail_level].any? do |key|
+      geometry_changed = %w[width_mm depth_mm height_mm panel_thickness_mm back_thickness_mm shelf_z_mm fronts detail_level drawers].any? do |key|
         current[key] != proposed[key]
       end
       Operation.run('Update cabinet', model: model) do

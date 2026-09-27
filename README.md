@@ -113,6 +113,15 @@ generic carcass records where possible. Concept appliances produce a warning and
 manufacturing parts. Results are bounded to 100 records per call and do not depend on SketchUp
 child entity IDs or current Furniture detail level.
 
+M5.7 adds a small original hardware catalog and a parameter-derived wooden drawer inside a
+Cabinet. `list_hardware_catalog` lists supported families; `plan_cabinet_drawer` checks an
+addition without editing the model. A Cabinet can store `drawers` through `create_cabinet`
+or `update_furniture_object`. Each drawer references a full-width drawer front and an
+explicitly selected slide-pair SKU, nominal length and side clearance. Construction detail
+generates five wooden panels. `generate_cutlist` reports those panels and one purchased pair
+per drawer, independent of display detail. No branded geometry, hinge selection, drilling
+or movement is inferred. See [M5.7 contract](tests/contracts/m57.md).
+
 M5.5 adds `plan_corner_kitchen_run` for a single generated L-shaped `kitchen.run` across two
 connected, perpendicular Walls. The two ordered base legs face the same interior. The corner
 may be a closed void or a concept blind cabinet with access from a selected leg. Each leg and

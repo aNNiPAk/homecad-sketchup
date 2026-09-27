@@ -10,6 +10,7 @@ module HomeCAD
         geometry.primitive.v1
         architecture.core.v1
         furniture.core.v1
+        furniture.hardware.v1
         furniture.presets.v1
         manufacturing.cutlist.v1
         project.defaults.v1
@@ -48,7 +49,8 @@ module HomeCAD
              'create_niche', 'create_column', 'update_architecture_object',
              'delete_architecture_object', 'create_room', 'detect_rooms'
           Architecture.dispatch(active_model!, method, params)
-        when 'get_furniture_frame', 'list_furniture_parts', 'create_cabinet',
+        when 'get_furniture_frame', 'list_furniture_parts', 'list_hardware_catalog',
+             'plan_cabinet_drawer', 'create_cabinet',
              'update_furniture_object', 'delete_furniture_object'
           Furniture.dispatch(active_model!, method, params)
         when 'get_project_settings' then empty!(params); ProjectSettings.read(active_model!)

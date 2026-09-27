@@ -138,7 +138,7 @@ class BridgeClient:
             })
             hello = check_response(await read_frame(reader, self.config.max_frame_bytes), 1)
             self._check_hello(hello)
-            self._check_method_capability(method, hello)
+            self._check_method_capability(method, hello, params)
             await self._send(writer, {
                 "jsonrpc": "2.0", "id": 2, "method": method, "params": params,
             })
@@ -170,7 +170,8 @@ class BridgeClient:
             )
 
     @staticmethod
-    def _check_method_capability(method: str, hello: dict[str, Any]) -> None:
+    def _check_method_capability(method: str, hello: dict[str, Any],
+                                 params: dict[str, Any] | None = None) -> None:
         required = METHOD_CAPABILITIES.get(method)
         if required is None:
             return
@@ -188,3 +189,29 @@ class BridgeClient:
                 "Install a HomeCAD RBZ that supports this operation and restart SketchUp.",
                 -32601,
             )
+        if BridgeClient._uses_service_zones(method, params or {}) and "kitchen.service_zone.v1" not in capabilities:
+            raise BridgeError(
+                "unsupported_operation",
+                "SketchUp bridge does not advertise 'kitchen.service_zone.v1'. "
+                "Install a HomeCAD RBZ with Kitchen service zones and restart SketchUp.",
+                -32601,
+            )
+
+    @staticmethod
+    def _uses_service_zones(method: str, params: dict[str, Any]) -> bool:
+        if method == "plan_kitchen_run":
+            values = params
+        elif method == "apply_kitchen_run":
+            plan = params.get("plan")
+            values = plan.get("params", {}) if isinstance(plan, dict) else {}
+        elif method == "update_kitchen_run":
+            values = params.get("changes", {})
+        else:
+            return False
+        if not isinstance(values, dict):
+            return False
+        modules = values.get("modules")
+        constraints = values.get("constraints")
+        return (isinstance(modules, list) and any(
+            isinstance(item, dict) and "service_clearance_mm" in item for item in modules
+        )) or (isinstance(constraints, dict) and constraints.get("require_service_clearance") is True)

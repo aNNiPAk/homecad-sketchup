@@ -4,6 +4,7 @@
 
 ### Added
 
+- M5.2 optional full-volume Kitchen service clearances in six directions, with cross-wall HomeCAD obstacle checks, cut-aware Walls, read-only structured findings, and an opt-in blocking constraint under `kitchen.service_zone.v1`.
 - M5.1 Kitchen planning accepts explicit start/end clearances and bounded coverage, countertop, opening-clearance, and module-depth constraints.
 - M5.1 semantic Kitchen child UUIDs and revisions survive regeneration; validation distinguishes appliance and wall-cabinet collisions using module bounds.
 - M5 KitchenRun planning and application under `kitchen.run.v1`: ordered base, wall, and tall modules; bounded filler, concept countertop/plinth, current-plan checks, read-only validation, semantic updates/deletion, and guarded real SketchUp smoke.
@@ -25,6 +26,7 @@
 
 ### Changed
 
+- Bumped the matched Python/Ruby extension version to 0.7.1 for M5.2; protocol remains 1 and older `kitchen.run.v1` requests remain supported.
 - Bumped the pre-1.0 version to 0.7.0 for the additive Kitchen capability and tools; protocol version remains 1.
 - Set the minimum supported Python MCP SDK to 1.30, the version currently locked and tested by the project.
 - Renamed generic entity `dimensions_mm` / `measure(kind="dimensions")` to `bbox_dimensions_mm` / `measure(kind="bbox_dimensions")`; both now state explicitly that values are world-aligned bounding-box extents. Bumped the pre-1.0 version to 0.3.0 for M1.1 and 0.4.0 for M2.

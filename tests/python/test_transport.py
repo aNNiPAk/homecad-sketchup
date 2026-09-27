@@ -126,6 +126,40 @@ async def test_old_bridge_status_works_without_capabilities_over_transport():
         await server.wait_closed()
 
 
+@pytest.mark.asyncio
+async def test_service_zone_capability_is_checked_before_sending_to_old_rbz():
+    methods = []
+
+    async def handler(reader, writer):
+        await read_request(reader)
+        await send_response(writer, response(1, result={
+            "protocol_version": 1, "ruby_extension_version": "0.7.0",
+            "capabilities": ["kitchen.run.v1"],
+        }))
+        try:
+            request = await read_request(reader)
+        except asyncio.IncompleteReadError:
+            writer.close()
+            return
+        methods.append(request["method"])
+        await send_response(writer, response(2, result={"legacy": True}))
+        writer.close()
+
+    server, port = await fake_bridge(handler)
+    try:
+        client = BridgeClient(Config(port=port))
+        assert await client.call("plan_kitchen_run", {"modules": []}) == {"legacy": True}
+        with pytest.raises(BridgeError, match="kitchen.service_zone.v1") as error:
+            await client.call("plan_kitchen_run", {"modules": [
+                {"key": "oven", "service_clearance_mm": {"front_mm": 100}},
+            ]})
+        assert error.value.category == "unsupported_operation"
+        assert methods == ["plan_kitchen_run"]
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
 def test_capability_list_may_be_empty_or_missing_but_must_be_well_formed():
     with pytest.raises(BridgeError) as missing:
         BridgeClient._check_method_capability("measure", {"ruby_extension_version": "0.2.1"})

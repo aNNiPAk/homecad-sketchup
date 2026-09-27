@@ -52,6 +52,7 @@ module HomeCAD
   module Kitchen
     CAPABILITY = 'kitchen.run.v1'.freeze
     MAX_MODULES = 32
+    MAX_SERVICE_CLEARANCE_MM = 5000.0
     TOLERANCE_MM = 0.01
     TYPES = {
       'base_shelves' => 'base', 'base_drawers' => 'base', 'sink' => 'base',
@@ -69,7 +70,8 @@ module HomeCAD
                     side modules clearance_mm filler_max_mm countertop
                     countertop_thickness_mm plinth constraints name].freeze
     CONSTRAINT_KEYS = %w[require_full_coverage require_countertop
-                         min_opening_clearance_mm max_module_depth_mm].freeze
+                         min_opening_clearance_mm max_module_depth_mm
+                         require_service_clearance].freeze
 
     def self.dispatch(model, method, params)
       case method
@@ -106,7 +108,7 @@ module HomeCAD
       seen = []
       normalized = modules.map.with_index do |item, index|
         invalid!("modules[#{index}] must be an object") unless item.is_a?(Hash)
-        Primitives.check_keys!(item, %w[key type width_mm depth_mm height_mm bottom_mm])
+        Primitives.check_keys!(item, %w[key type width_mm depth_mm height_mm bottom_mm service_clearance_mm])
         kind = item['type']
         invalid!("unsupported module type: #{kind.inspect}") unless TYPES.key?(kind)
         current_tier = TYPES[kind]
@@ -122,8 +124,21 @@ module HomeCAD
         bottom = number(item.fetch('bottom_mm', bottom), "modules[#{index}].bottom_mm")
         constraint!('module bottom must be nonnegative') if bottom.negative?
         constraint!('module width and height must exceed 36 mm for the Cabinet case') if width <= 36 || height <= 36
-        { 'key' => key, 'type' => kind, 'width_mm' => width,
+        value = { 'key' => key, 'type' => kind, 'width_mm' => width,
           'depth_mm' => depth, 'height_mm' => height, 'bottom_mm' => bottom }
+        if item.key?('service_clearance_mm')
+          service = item['service_clearance_mm']
+          invalid!('service_clearance_mm must be an object') unless service.is_a?(Hash)
+          Primitives.check_keys!(service, ServiceZones::DIRECTIONS)
+          normalized_service = ServiceZones::DIRECTIONS.to_h do |direction|
+            amount = number(service.fetch(direction, 0), "modules[#{index}].service_clearance_mm.#{direction}")
+            constraint!("#{direction} must be between 0 and #{MAX_SERVICE_CLEARANCE_MM} mm") if
+              amount.negative? || amount > MAX_SERVICE_CLEARANCE_MM
+            [direction, amount]
+          end
+          value['service_clearance_mm'] = normalized_service if normalized_service.values.any?(&:positive?)
+        end
+        value
       end
       if tier == 'base' && normalized.map { |item| item['bottom_mm'] + item['height_mm'] }.uniq.length > 1
         constraint!('base module tops must align for one countertop')
@@ -143,8 +158,9 @@ module HomeCAD
       Primitives.check_keys!(constraints, CONSTRAINT_KEYS)
       full_coverage = constraints.fetch('require_full_coverage', false)
       required_countertop = constraints.fetch('require_countertop', tier == 'base')
+      required_service = constraints.fetch('require_service_clearance', false)
       invalid!('coverage constraints must be boolean') unless [true, false].include?(full_coverage) &&
-        [true, false].include?(required_countertop)
+        [true, false].include?(required_countertop) && [true, false].include?(required_service)
       opening_clearance = number(constraints.fetch('min_opening_clearance_mm', 0), 'min_opening_clearance_mm')
       constraint!('min_opening_clearance_mm must be nonnegative') if opening_clearance.negative?
       max_depth = constraints['max_module_depth_mm']
@@ -153,6 +169,7 @@ module HomeCAD
         'require_countertop' => required_countertop,
         'min_opening_clearance_mm' => opening_clearance,
         'max_module_depth_mm' => max_depth }
+      constraints['require_service_clearance'] = true if required_service
       name = input.fetch('name', 'Kitchen run')
       invalid!('name must be a nonempty string of at most 128 characters') unless name.is_a?(String) && !name.strip.empty? && name.length <= 128
 
@@ -189,12 +206,25 @@ module HomeCAD
         'countertop_thickness_mm' => countertop_thickness, 'plinth' => plinth,
         'name' => name, 'tier' => tier, 'span_mm' => span, 'top_mm' => top }
       conflicts.concat(scene_conflicts(model, canonical, exclude_id: exclude_id))
+      service_zones, service_findings, truncated = if normalized.any? { |item| item.key?('service_clearance_mm') }
+        ServiceZones.check(model, canonical, exclude_run_id: exclude_id)
+      else
+        [[], [], false]
+      end
+      if required_service
+        conflicts.concat(service_findings.map { |finding| finding.merge('message' =>
+          "module #{finding['module_key']} has blocked #{finding['direction']} service clearance") })
+      end
+      conflicts << conflict('service_check_incomplete', 'service clearance check exceeded its result limit') if truncated
       warnings = []
       warnings << 'remaining wall space is unallocated' if remaining > filler_max + TOLERANCE_MM
       warnings << 'base run has no countertop' if tier == 'base' && !countertop
+      warnings << "#{service_findings.length} service clearance obstruction(s); inspect service_findings" if
+        service_findings.any? && !required_service
       result = { 'params' => canonical, 'wall_revision' => wall_metadata['revision'],
         'positions' => positions, 'filler_mm' => filler, 'remaining_mm' => [remaining - filler, 0.0].max,
-        'warnings' => warnings, 'conflicts' => conflicts, 'units' => 'mm' }
+        'warnings' => warnings, 'conflicts' => conflicts, 'service_zones' => service_zones,
+        'service_findings' => service_findings, 'units' => 'mm' }
       result['fingerprint'] = Digest::SHA256.hexdigest(JSON.generate(KitchenData.canonical(result)))
       result
     end
@@ -395,7 +425,7 @@ module HomeCAD
         root.transformation = run_transform(model, values)
         build_geometry!(model, root, values, fresh)
         MutationResult.success(operation: 'apply_kitchen_run',
-          created: [serialize(root)] + child_serializations(root), revision: 1)
+          created: [serialize(root)] + child_serializations(root), warnings: fresh['warnings'], revision: 1)
       end
     rescue Runtime::BridgeError then raise
     rescue StandardError => error
@@ -485,6 +515,7 @@ module HomeCAD
       current = plan(model, editable_input(values), exclude_id: id)
       { 'homecad_id' => id, 'valid' => current['conflicts'].empty?,
         'conflicts' => current['conflicts'], 'warnings' => current['warnings'],
+        'service_zones' => current['service_zones'], 'service_findings' => current['service_findings'],
         'module_count' => values['modules'].length, 'units' => 'mm' }
     end
 
@@ -526,7 +557,7 @@ module HomeCAD
           created: children.reject { |child| previous_ids.include?(child['homecad_id']) },
           updated: [serialize(root)] + children.select { |child| previous_ids.include?(child['homecad_id']) },
           deleted: rebuild ? previous_children.reject { |child| current_ids.include?(child['homecad_id']) } : [],
-          revision: Metadata.read(root)['revision'])
+          warnings: proposed['warnings'], revision: Metadata.read(root)['revision'])
       end
     rescue Runtime::BridgeError then raise
     rescue StandardError => error

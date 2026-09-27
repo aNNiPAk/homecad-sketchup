@@ -1,4 +1,5 @@
 require_relative 'test_furniture'
+require_relative '../../sketchup/homecad/core/service_zones'
 require_relative '../../sketchup/homecad/core/kitchen'
 
 class KitchenTest < Minitest::Test
@@ -237,6 +238,193 @@ class KitchenTest < Minitest::Test
     assert_empty safe_upper['conflicts']
     opposite_side = HomeCAD::Kitchen.plan(@model, input.merge('side' => 'negative_v'))
     assert_empty opposite_side['conflicts']
+  end
+
+  def service_input(clearance, side: 'positive_v', strict: false)
+    input.merge('end_mm' => 700, 'side' => side,
+      'countertop' => false, 'plinth' => false,
+      'constraints' => { 'require_countertop' => false,
+        'require_service_clearance' => strict },
+      'modules' => [{ 'key' => 'dishwasher', 'type' => 'dishwasher', 'width_mm' => 600,
+        'service_clearance_mm' => clearance }])
+  end
+
+  def create_obstacle_column(origin, width: 30, depth: 30, height: 30, rotation: 0)
+    HomeCAD::Architecture.create_column(@model, 'origin_mm' => origin,
+      'width_mm' => width, 'depth_mm' => depth, 'height_mm' => height,
+      'rotation_degrees' => rotation).dig('created', 0, 'identity', 'homecad_id')
+  end
+
+  def test_service_clearance_schema_and_legacy_defaults
+    legacy = HomeCAD::Kitchen.plan(@model, input)
+    refute legacy['params']['modules'].first.key?('service_clearance_mm')
+    refute legacy.dig('params', 'constraints').key?('require_service_clearance')
+    zero = HomeCAD::Kitchen.plan(@model, service_input({}))
+    refute zero['params']['modules'].first.key?('service_clearance_mm')
+    assert_empty zero['service_zones']
+    assert_empty zero['service_findings']
+    %w[u_start_mm u_end_mm front_mm back_mm top_mm bottom_mm].each do |direction|
+      plan = HomeCAD::Kitchen.plan(@model, service_input({ direction => 25 }))
+      assert_equal 25.0, plan.dig('params', 'modules', 0, 'service_clearance_mm', direction)
+      assert_equal 1, plan['service_zones'].length
+    end
+    [-1, 5001, Float::INFINITY].each do |amount|
+      assert_raises(HomeCAD::Runtime::BridgeError) do
+        HomeCAD::Kitchen.plan(@model, service_input({ 'front_mm' => amount }))
+      end
+    end
+  end
+
+  def test_service_zone_six_directions_and_touching_bounds
+    body = [100, 700, 0, 560, 100, 820]
+    clearances = HomeCAD::ServiceZones::DIRECTIONS.to_h { |key| [key, 40] }
+    slabs = HomeCAD::ServiceZones.slabs(body, clearances)
+    assert_equal %w[u_start u_end front back top bottom].sort, slabs.keys.sort
+    frame = [[0, 60, 0], [1, 0, 0], [0, 1, 0]]
+    boxes = { 'u_start' => [70, 100, 150], 'u_end' => [710, 100, 150],
+      'front' => [200, 625, 150], 'back' => [200, 35, 150],
+      'top' => [200, 100, 830], 'bottom' => [200, 100, 70] }
+    boxes.each do |direction, origin|
+      zone = HomeCAD::ServiceZones.box(*frame, slabs.fetch(direction))
+      obstacle = HomeCAD::ServiceZones.box(origin, [1, 0, 0], [0, 1, 0], [0, 10, 0, 10, 0, 10])
+      assert HomeCAD::ServiceZones.overlap?(zone, obstacle), direction
+    end
+    touching = HomeCAD::ServiceZones.box([740, 60, 0], [1, 0, 0], [0, 1, 0],
+      [0, 10, 0, 10, 100, 110])
+    refute HomeCAD::ServiceZones.overlap?(
+      HomeCAD::ServiceZones.box(*frame, slabs.fetch('u_end')), touching)
+    diagonal = Math.sqrt(0.5)
+    rotated = HomeCAD::ServiceZones.box([0, 0, 0], [diagonal, diagonal, 0],
+      [-diagonal, diagonal, 0], [0, 1000, 0, 20, 0, 100])
+    outside = HomeCAD::ServiceZones.box([600, 0, 0], [1, 0, 0], [0, 1, 0],
+      [0, 50, 0, 50, 0, 100])
+    refute HomeCAD::ServiceZones.overlap?(rotated, outside)
+    %w[positive_v negative_v].each do |side|
+      wall = HomeCAD::Architecture.wall_entity!(@model, { 'homecad_id' => @wall_id })[1]
+      side_frame = HomeCAD::ServiceZones.frame_from_wall(wall, side: side)
+      slabs.each_value do |limits|
+        zone = HomeCAD::ServiceZones.box(*side_frame, limits)
+        assert HomeCAD::ServiceZones.overlap?(zone, zone)
+      end
+    end
+  end
+
+  def test_same_run_filler_blocks_side_zone_but_own_countertop_is_exempt
+    request = input.merge('end_mm' => 800, 'modules' => [
+      { 'key' => 'hob', 'type' => 'hob', 'width_mm' => 600,
+        'service_clearance_mm' => { 'u_end_mm' => 100, 'top_mm' => 100 } }
+    ])
+    plan = HomeCAD::Kitchen.plan(@model, request)
+    assert_equal 100.0, plan['filler_mm']
+    assert plan['service_findings'].any? { |finding|
+      finding['direction'] == 'u_end' && finding['obstacle_key'] == 'filler' }
+    refute plan['service_findings'].any? { |finding| finding['obstacle_key'] == 'countertop' }
+  end
+
+  def test_advisory_and_strict_service_zone_are_read_only_until_apply
+    column_id = create_obstacle_column([250, 630, 150])
+    request = service_input({ 'front_mm' => 100 })
+    @model.events.clear
+    advisory = HomeCAD::Kitchen.plan(@model, request)
+    assert_empty @model.events
+    assert_equal column_id, advisory.dig('service_findings', 0, 'object_id')
+    assert_equal 'front', advisory.dig('service_findings', 0, 'direction')
+    assert_empty advisory['conflicts']
+    assert advisory['warnings'].any? { |warning| warning.include?('service clearance') }
+    applied = HomeCAD::Kitchen.apply(@model, 'plan' => advisory)
+    assert applied['warnings'].any? { |warning| warning.include?('service clearance') }
+    strict = HomeCAD::Kitchen.plan(@model, request.merge('constraints' =>
+      request['constraints'].merge('require_service_clearance' => true)))
+    assert_includes strict['conflicts'].map { |item| item['code'] }, 'service_clearance_blocked'
+    @model.events.clear
+    error = assert_raises(HomeCAD::Runtime::BridgeError) do
+      HomeCAD::Kitchen.apply(@model, 'plan' => strict)
+    end
+    assert_equal 'constraint_violation', error.category
+    assert_empty @model.events
+  end
+
+  def test_adjacent_wall_opening_removes_service_obstacle
+    wall_id = HomeCAD::Architecture.create_wall(@model, 'start_mm' => [800, 500, 0],
+      'end_mm' => [800, 1100, 0], 'thickness_mm' => 120, 'height_mm' => 2700)
+      .dig('created', 0, 'identity', 'homecad_id')
+    request = service_input({ 'u_end_mm' => 150, 'front_mm' => 50 })
+    blocked = HomeCAD::Kitchen.plan(@model, request)
+    assert_includes blocked['service_findings'].map { |finding| finding['object_id'] }, wall_id
+    HomeCAD::Architecture.create_hosted(@model, 'architecture.opening',
+      'wall' => { 'homecad_id' => wall_id }, 'offset_mm' => 0,
+      'bottom_mm' => 0, 'width_mm' => 200, 'height_mm' => 1000)
+    clear = HomeCAD::Kitchen.plan(@model, request)
+    refute_includes clear['service_findings'].map { |finding| finding['object_id'] }, wall_id
+  end
+
+  def test_negative_side_and_rotated_column_collision
+    column_id = create_obstacle_column([200, -700, 150], width: 100, depth: 100,
+      height: 100, rotation: 45)
+    plan = HomeCAD::Kitchen.plan(@model, service_input({ 'front_mm' => 100 }, side: 'negative_v'))
+    assert_includes plan['service_findings'].map { |finding| finding['object_id'] }, column_id
+  end
+
+  def test_other_kitchen_and_furniture_block_service_volume_without_body_collision
+    other_request = input.merge('start_mm' => 800, 'end_mm' => 1400,
+      'countertop' => false, 'plinth' => false,
+      'constraints' => { 'require_countertop' => false },
+      'modules' => [{ 'key' => 'other', 'type' => 'base_shelves', 'width_mm' => 600 }])
+    other_id = HomeCAD::Kitchen.apply(@model,
+      'plan' => HomeCAD::Kitchen.plan(@model, other_request)).dig('created', 0, 'identity', 'homecad_id')
+    plan = HomeCAD::Kitchen.plan(@model, service_input({ 'u_end_mm' => 200 }))
+    assert_empty plan['conflicts']
+    assert_includes plan['service_findings'].map { |item| item['object_id'] }, other_id
+
+    cabinet_id = HomeCAD::Furniture.create_cabinet(@model,
+      'width_mm' => 100, 'depth_mm' => 100, 'height_mm' => 100,
+      'placement' => { 'mode' => 'world', 'origin_mm' => [250, 630, 150],
+                       'rotation_degrees' => 0 }).dig('created', 0, 'identity', 'homecad_id')
+    front = HomeCAD::Kitchen.plan(@model, service_input({ 'front_mm' => 100 }))
+    assert_includes front['service_findings'].map { |item| item['object_id'] }, cabinet_id
+  end
+
+  def test_later_obstacle_is_visible_and_strict_update_is_atomic
+    request = service_input({ 'front_mm' => 100 })
+    created = HomeCAD::Kitchen.apply(@model, 'plan' => HomeCAD::Kitchen.plan(@model, request))
+    run_id = created.dig('created', 0, 'identity', 'homecad_id')
+    module_id = created['created'].find { |item| item.dig('metadata', 'module_key') == 'dishwasher' }
+      .dig('identity', 'homecad_id')
+    root = @model.entities.find { |entity| HomeCAD::Metadata.read(entity)['homecad_id'] == run_id }
+    assert_empty HomeCAD::Kitchen.validate(@model, 'target' => { 'homecad_id' => run_id })['service_findings']
+    column_id = create_obstacle_column([250, 630, 150])
+    validation = HomeCAD::Kitchen.validate(@model, 'target' => { 'homecad_id' => run_id })
+    assert validation['valid']
+    assert_equal column_id, validation.dig('service_findings', 0, 'object_id')
+    before = HomeCAD::KitchenData.read(root)
+    @model.events.clear
+    error = assert_raises(HomeCAD::Runtime::BridgeError) do
+      HomeCAD::Kitchen.update(@model, 'target' => { 'homecad_id' => run_id },
+        'changes' => { 'constraints' => before['constraints'].merge('require_service_clearance' => true) })
+    end
+    assert_equal 'constraint_violation', error.category
+    assert_empty @model.events
+    assert_equal before, HomeCAD::KitchenData.read(root)
+    assert_equal 1, HomeCAD::Metadata.read(root)['revision']
+    HomeCAD::Architecture.delete_object(@model, 'target' => { 'homecad_id' => column_id })
+    @model.events.clear
+    updated = HomeCAD::Kitchen.update(@model, 'target' => { 'homecad_id' => run_id },
+      'changes' => { 'constraints' => before['constraints'].merge('require_service_clearance' => true) })
+    assert_equal [:start, :commit], @model.events.map(&:first)
+    assert_equal 2, updated['revision']
+    assert_equal run_id, HomeCAD::Metadata.read(root)['homecad_id']
+    assert_equal module_id, HomeCAD::KitchenData.read(root).dig('semantic_objects',
+      'module:dishwasher', 'homecad_id')
+    assert_empty HomeCAD::Kitchen.validate(@model, 'target' => { 'homecad_id' => run_id })['service_findings']
+  end
+
+  def test_service_finding_limit_is_blocking_even_in_advisory_mode
+    101.times { |index| create_obstacle_column([200 + index, 630, 150]) }
+    @model.events.clear
+    plan = HomeCAD::Kitchen.plan(@model, service_input({ 'front_mm' => 100 }))
+    assert_equal HomeCAD::ServiceZones::MAX_FINDINGS, plan['service_findings'].length
+    assert_includes plan['conflicts'].map { |item| item['code'] }, 'service_check_incomplete'
+    assert_empty @model.events
   end
 
   def test_generator_failure_aborts_whole_kitchen_operation

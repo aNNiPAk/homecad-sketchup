@@ -17,7 +17,7 @@ uv sync --project mcp
 uv run --project mcp python scripts/build_rbz.py
 ```
 
-Install `dist\homecad.rbz` with **SketchUp → Extensions → Extension Manager → Install Extension**, then restart SketchUp. The Ruby Console should show `[HomeCAD] INFO listening on 127.0.0.1:37941`. Confirm that `homecad_status.ruby_extension_version` says `0.7.0` and advertises `kitchen.run.v1` before using Kitchen tools.
+Install `dist\homecad.rbz` with **SketchUp → Extensions → Extension Manager → Install Extension**, then restart SketchUp. The Ruby Console should show `[HomeCAD] INFO listening on 127.0.0.1:37941`. Confirm that `homecad_status.ruby_extension_version` says `0.7.1` and advertises `kitchen.run.v1` and `kitchen.service_zone.v1` before using Kitchen service zones.
 
 The M0 connection check remains available:
 
@@ -84,7 +84,7 @@ M4 adds `furniture.core.v1` and a parametric `furniture.cabinet`. Use `create_ca
 
 Cabinet local origin is back-left-bottom. Local X is width, Y runs from back to front, and Z is vertical. World placement uses a global-Z rotation. Wall placement stores offset, bottom, side, and clearance in the Wall's local frame; the Cabinet follows Wall translation, rotation, and direction changes without changing these parameters. Wall shortening/height changes are rejected if the Cabinet no longer fits. Deleting a Wall with an attached Cabinet requires `cascade=true` and removes both in one Undo operation.
 
-`construction` detail creates separate generated carcass, optional back, shelf, and front panel Groups. Set `back_thickness_mm` to `0` to omit the back; shelves then start at the rear plane and span the full depth. `concept` detail uses an open-front case envelope; configured fronts are plane faces at the front plane, without a coincident envelope face behind them. `list_furniture_parts` is parameter-derived and stable across these detail levels. The current core does not model hinges, hardware, drawer boxes, appliances, Kitchen runs, Electrical, or Lighting.
+`construction` detail creates separate generated carcass, optional back, shelf, and front panel Groups. Set `back_thickness_mm` to `0` to omit the back; shelves then start at the rear plane and span the full depth. `concept` detail uses an open-front case envelope; configured fronts are plane faces at the front plane, without a coincident envelope face behind them. `list_furniture_parts` is parameter-derived and stable across these detail levels. The Furniture core does not model hinges, hardware, or drawer boxes; Kitchen composition is provided separately by M5.
 
 Run the M4 smoke only in a disposable SketchUp model. It checks construction/concept LOD, positive/negative Wall sides, same-transform detach/reattach, Wall relocation and fit rejection, a no-back Cabinet, screenshots, cascade-delete Undo, and cleanup of all test identities:
 
@@ -101,6 +101,8 @@ M5 adds `kitchen.run.v1` and a two-phase workflow: `plan_kitchen_run` reads a Ho
 Each straight run has one tier: base, wall, or tall. Base modules include shelves, drawers, sink, hob, dishwasher, and oven; tall modules include storage and fridge; wall modules include shelves and lift front. Appliance and sink/hob geometry is conceptual. A base run may generate a single straight countertop, plinth, and end filler. All placement lengths are millimeters in the Wall U frame. The planner accepts separate start/end clearances and explicit coverage, countertop, opening-clearance, and depth constraints. See [the M5 contract](tests/contracts/m5.md) and [M5 decisions](docs/M5_DECISIONS.md) for module schemas and current limitations.
 
 Applied modules, appliances, filler, countertop, and plinth have their own stable HomeCAD UUIDs. `find_objects` and `get_object` can inspect them; `update_kitchen_run` regenerates them from run parameters and preserves each semantic UUID. The planner checks collisions using each part's U, height, and depth span, and reports distinct appliance and wall-cabinet conflicts. SketchUp child persistent IDs may change during regeneration.
+
+M5.2 accepts optional six-direction `service_clearance_mm` values on each module. The plan and `validate_kitchen` report blocked 3D service space against HomeCAD Walls (including openings), Columns, Cabinets, and Kitchen parts, even on neighboring Walls. These are explicit project clearances, not built-in regulations. Findings warn by default; `constraints.require_service_clearance=true` blocks apply/update until the space is clear. Later changes to other objects are detected by `validate_kitchen`, not blocked by those objects' mutation tools. Ordinary SketchUp geometry, door movement, and internal Cabinet voids are outside this check. See [the M5 contract](tests/contracts/m5.md) for coordinates and result fields.
 
 The guarded real SketchUp smoke captures a KitchenRun, checks validation and Undo cleanup, and requires the dedicated disposable fixture:
 

@@ -11,6 +11,7 @@ module HomeCAD
         architecture.core.v1
         furniture.core.v1
         kitchen.run.v1
+        kitchen.service_zone.v1
       ].freeze
 
       def self.dispatch(request, handshake_done:)

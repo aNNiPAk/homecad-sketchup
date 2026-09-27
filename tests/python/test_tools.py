@@ -240,6 +240,27 @@ def test_kitchen_methods_require_capability():
     })
 
 
+def test_service_zones_require_additive_capability_only_when_used():
+    old = {"capabilities": ["kitchen.run.v1"]}
+    new = {"capabilities": ["kitchen.run.v1", "kitchen.service_zone.v1", "future.v9"]}
+    legacy = {"modules": [{"key": "sink", "type": "sink", "width_mm": 600}]}
+    service = {"modules": [{**legacy["modules"][0],
+               "service_clearance_mm": {"front_mm": 100}}]}
+    BridgeClient._check_method_capability("plan_kitchen_run", old, legacy)
+    BridgeClient._check_method_capability("apply_kitchen_run", old, {"plan": {"params": legacy}})
+    BridgeClient._check_method_capability("validate_kitchen", old, {"target": {"homecad_id": "run"}})
+    for method, params in (
+        ("plan_kitchen_run", service),
+        ("apply_kitchen_run", {"plan": {"params": service}}),
+        ("update_kitchen_run", {"changes": service}),
+        ("plan_kitchen_run", {"constraints": {"require_service_clearance": True}}),
+    ):
+        with pytest.raises(BridgeError, match="kitchen.service_zone.v1") as missing:
+            BridgeClient._check_method_capability(method, old, params)
+        assert missing.value.category == "unsupported_operation"
+        BridgeClient._check_method_capability(method, new, params)
+
+
 @pytest.mark.asyncio
 async def test_kitchen_tools_forward_plan_and_mutation(monkeypatch):
     calls = []

@@ -241,6 +241,7 @@ async def test_m5_plan_apply_validate_cross_language():
         client = BridgeClient(Config(port=port))
         status = await client.call("homecad_status")
         assert "kitchen.run.v1" in status["capabilities"]
+        assert "kitchen.service_zone.v1" in status["capabilities"]
         wall = await client.call("create_wall", {
             "start_mm": [0, 0, 0], "end_mm": [3000, 0, 0],
             "thickness_mm": 120, "height_mm": 2700,
@@ -251,13 +252,16 @@ async def test_m5_plan_apply_validate_cross_language():
             "end_mm": 1500, "start_clearance_mm": 50, "end_clearance_mm": 50,
             "constraints": {"require_full_coverage": True},
             "side": "negative_v", "modules": [
-                {"key": "sink", "type": "sink", "width_mm": 600},
+                {"key": "sink", "type": "sink", "width_mm": 600,
+                 "service_clearance_mm": {"front_mm": 50}},
                 {"key": "hob", "type": "hob", "width_mm": 600},
             ],
         })
         assert not plan["conflicts"]
         assert plan["filler_mm"] == 100
         assert plan["positions"][0]["offset_mm"] == 150
+        assert plan["service_zones"][0]["module_key"] == "sink"
+        assert not plan["service_findings"]
         applied = await client.call("apply_kitchen_run", {"plan": plan})
         run_id = applied["created"][0]["identity"]["homecad_id"]
         assert applied["created"][0]["metadata"]["type"] == "kitchen.run"
@@ -272,9 +276,17 @@ async def test_m5_plan_apply_validate_cross_language():
         validation = await client.call("validate_kitchen", {"target": {"homecad_id": run_id}})
         assert validation["valid"] is True
         assert validation["module_count"] == 2
+        obstacle = await client.call("create_column", {
+            "origin_mm": [200, -650, 150], "width_mm": 50,
+            "depth_mm": 50, "height_mm": 50,
+        })
+        obstacle_id = obstacle["created"][0]["homecad_id"]
+        with_obstacle = await client.call("validate_kitchen", {"target": {"homecad_id": run_id}})
+        assert any(item["object_id"] == obstacle_id for item in with_obstacle["service_findings"])
         changed = await client.call("update_kitchen_run", {"target": {"homecad_id": run_id},
             "changes": {"modules": [
-                {"key": "sink", "type": "sink", "width_mm": 600},
+                {"key": "sink", "type": "sink", "width_mm": 600,
+                 "service_clearance_mm": {"front_mm": 50}},
                 {"key": "hob", "type": "hob", "width_mm": 650},
             ]}})
         assert changed["revision"] == 2

@@ -4,6 +4,8 @@
 
 ### Added
 
+- Hardware research report consolidating catalog findings, dynamic data, manufacturer calculation examples, and the direction for an original parametric HomeCAD library.
+
 - Component storage research comparing lossless SKP archives with HCG1 and recommending catalog metadata, compressed delivery, and a native SKP cache.
 
 - Read-only analysis of Blum Dynamic Component dictionaries, formulas, material markers, and deduplicated storage estimates for the HCG1 research.

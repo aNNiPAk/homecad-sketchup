@@ -382,6 +382,37 @@ async def delete_furniture_object(target: dict) -> dict:
 
 
 @mcp.tool(annotations=READ_ONLY_TOOL)
+async def get_project_settings() -> dict:
+    """Read HomeCAD project defaults and their revision."""
+    return await _scene_call("get_project_settings", {})
+
+
+@mcp.tool(annotations=MUTATE_TOOL)
+async def update_project_settings(changes: dict) -> dict:
+    """Validate and atomically update project defaults and inheriting Cabinets."""
+    return await _scene_call("update_project_settings", {"changes": changes})
+
+
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def list_furniture_presets() -> dict:
+    """List HomeCAD-authored versioned Cabinet assembly presets."""
+    return await _scene_call("list_furniture_presets", {})
+
+
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def get_furniture_preset(preset_id: str) -> dict:
+    """Describe one Cabinet assembly preset and its inherited fields."""
+    return await _scene_call("get_furniture_preset", {"preset_id": preset_id})
+
+
+@mcp.tool(annotations=CREATE_TOOL)
+async def create_cabinet_from_preset(preset_id: str, overrides: dict | None = None) -> dict:
+    """Create one managed Cabinet from a versioned preset and explicit overrides."""
+    return await _scene_call("create_cabinet_from_preset",
+                             {"preset_id": preset_id, "overrides": overrides or {}})
+
+
+@mcp.tool(annotations=READ_ONLY_TOOL)
 async def plan_kitchen_run(wall: dict, start_mm: float, end_mm: float,
                            side: str, modules: list[dict], clearance_mm: float = 0,
                            start_clearance_mm: float = 0, end_clearance_mm: float = 0,

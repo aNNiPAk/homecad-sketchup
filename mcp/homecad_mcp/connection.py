@@ -49,6 +49,11 @@ METHOD_CAPABILITIES = {
     "create_cabinet": "furniture.core.v1",
     "update_furniture_object": "furniture.core.v1",
     "delete_furniture_object": "furniture.core.v1",
+    "get_project_settings": "project.defaults.v1",
+    "update_project_settings": "project.defaults.v1",
+    "list_furniture_presets": "furniture.presets.v1",
+    "get_furniture_preset": "furniture.presets.v1",
+    "create_cabinet_from_preset": "furniture.presets.v1",
     "plan_kitchen_run": "kitchen.run.v1",
     "apply_kitchen_run": "kitchen.run.v1",
     "validate_kitchen": "kitchen.run.v1",
@@ -102,19 +107,7 @@ class BridgeClient:
         self.config = config or Config.from_env()
 
     async def call(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        if method not in ("homecad_status", "get_model_info", "list_objects", "find_objects",
-                          "get_object", "get_selection", "measure", "capture_view", "undo",
-                          "create_group", "create_face", "create_edge", "create_box",
-                          "create_circle", "create_arc", "create_polygon", "push_pull",
-                          "follow_me", "transform_object", "boolean_operation",
-                          "get_wall_frame", "create_wall", "create_opening", "create_door",
-                          "create_window", "create_niche", "create_column",
-                          "update_architecture_object", "delete_architecture_object",
-                          "create_room", "detect_rooms", "get_furniture_frame",
-                          "list_furniture_parts", "create_cabinet",
-                          "update_furniture_object", "delete_furniture_object",
-                          "plan_kitchen_run", "apply_kitchen_run", "validate_kitchen",
-                          "update_kitchen_run", "delete_kitchen_run"):
+        if method != "homecad_status" and method not in METHOD_CAPABILITIES:
             raise BridgeError("unsupported_operation", f"unsupported method: {method}")
         try:
             async with asyncio.timeout(self.config.timeout):

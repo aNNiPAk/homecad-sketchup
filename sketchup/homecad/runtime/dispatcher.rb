@@ -10,6 +10,8 @@ module HomeCAD
         geometry.primitive.v1
         architecture.core.v1
         furniture.core.v1
+        furniture.presets.v1
+        project.defaults.v1
         kitchen.run.v1
         kitchen.service_zone.v1
       ].freeze
@@ -46,6 +48,19 @@ module HomeCAD
         when 'get_furniture_frame', 'list_furniture_parts', 'create_cabinet',
              'update_furniture_object', 'delete_furniture_object'
           Furniture.dispatch(active_model!, method, params)
+        when 'get_project_settings' then empty!(params); ProjectSettings.read(active_model!)
+        when 'update_project_settings' then
+          Primitives.check_keys!(params, %w[changes])
+          ProjectSettings.update(active_model!, params['changes'])
+        when 'list_furniture_presets' then empty!(params); FurniturePresets.list
+        when 'get_furniture_preset' then
+          Primitives.check_keys!(params, %w[preset_id])
+          FurniturePresets.get(params['preset_id'])
+        when 'create_cabinet_from_preset' then
+          Primitives.check_keys!(params, %w[preset_id overrides])
+          preset_params, source = FurniturePresets.resolve(active_model!, params['preset_id'],
+            params.fetch('overrides', {}))
+          Furniture.create_cabinet(active_model!, preset_params, source: source)
         when 'plan_kitchen_run', 'apply_kitchen_run', 'validate_kitchen',
              'update_kitchen_run', 'delete_kitchen_run'
           Kitchen.dispatch(active_model!, method, params)

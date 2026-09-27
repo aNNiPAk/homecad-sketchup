@@ -96,6 +96,15 @@ See [the M4 contract](tests/contracts/m4.md) and [M4 decisions](docs/M4_DECISION
 
 ## Kitchen runs (M5)
 
+M5.3 adds project defaults and HomeCAD-authored Cabinet presets. Use `get_project_settings` and
+`update_project_settings` for panel/back thickness, material IDs, and Cabinet wall mounting
+clearance. `list_furniture_presets` and `get_furniture_preset` describe the small built-in catalog;
+`create_cabinet_from_preset` accepts an ID and explicit overrides. Only new preset-created
+Cabinets inherit project fields. Existing Cabinets and direct `create_cabinet` calls retain their
+explicit values. An invalid default change is rejected before SketchUp Undo starts; a valid change
+updates all affected Cabinets in one Undo operation. Kitchen appliance service clearances remain
+explicit per module.
+
 M5 adds `kitchen.run.v1` and a two-phase workflow: `plan_kitchen_run` reads a HomeCAD Wall and returns ordered module positions, an optional bounded end filler, warnings, and conflicts without editing the model. `apply_kitchen_run` accepts that exact plan, recomputes it against the current Wall and scene, then creates one generated KitchenRun in one Undo operation. `validate_kitchen` is read-only; `update_kitchen_run` and `delete_kitchen_run` edit the semantic root. The run follows its Wall through the shared attachment projection, and primitive tools cannot edit generated Kitchen children.
 
 Each straight run has one tier: base, wall, or tall. Base modules include shelves, drawers, sink, hob, dishwasher, and oven; tall modules include storage and fridge; wall modules include shelves and lift front. Appliance and sink/hob geometry is conceptual. A base run may generate a single straight countertop, plinth, and end filler. All placement lengths are millimeters in the Wall U frame. The planner accepts separate start/end clearances and explicit coverage, countertop, opening-clearance, and depth constraints. See [the M5 contract](tests/contracts/m5.md) and [M5 decisions](docs/M5_DECISIONS.md) for module schemas and current limitations.

@@ -4,6 +4,7 @@ module HomeCAD
   module FurnitureData
     PARAMS_KEY = 'furniture_params_json'.freeze
     RELATIONSHIPS_KEY = 'furniture_relationships_json'.freeze
+    SOURCE_KEY = 'furniture_source_json'.freeze
 
     def self.read_params(entity)
       read_json(entity, PARAMS_KEY)
@@ -11,6 +12,14 @@ module HomeCAD
 
     def self.read_relationships(entity)
       read_json(entity, RELATIONSHIPS_KEY)
+    end
+
+    def self.read_source(entity)
+      read_json(entity, SOURCE_KEY)
+    end
+
+    def self.write_source(entity, source)
+      entity.set_attribute(Metadata::DICTIONARY, SOURCE_KEY, JSON.generate(canonical(source)))
     end
 
     def self.write(entity, params:)

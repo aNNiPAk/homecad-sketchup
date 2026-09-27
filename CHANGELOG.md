@@ -4,6 +4,8 @@
 
 ### Added
 
+- M5.3 project-level Cabinet defaults and an original versioned Cabinet preset catalog with explicit overrides and atomic dependent regeneration under `project.defaults.v1` and `furniture.presets.v1`.
+
 - M5.2 optional full-volume Kitchen service clearances in six directions, with cross-wall HomeCAD obstacle checks, cut-aware Walls, read-only structured findings, and an opt-in blocking constraint under `kitchen.service_zone.v1`.
 - M5.1 Kitchen planning accepts explicit start/end clearances and bounded coverage, countertop, opening-clearance, and module-depth constraints.
 - M5.1 semantic Kitchen child UUIDs and revisions survive regeneration; validation distinguishes appliance and wall-cabinet collisions using module bounds.
@@ -25,6 +27,8 @@
 - M0 bootstrap with Python MCP server, SketchUp Ruby extension, local transport, handshake, tests, and RBZ packaging.
 
 ### Changed
+
+- Bumped the matched Python/Ruby extension version to 0.8.0 for M5.3; protocol remains 1.
 
 - Bumped the matched Python/Ruby extension version to 0.7.1 for M5.2; protocol remains 1 and older `kitchen.run.v1` requests remain supported.
 - Bumped the pre-1.0 version to 0.7.0 for the additive Kitchen capability and tools; protocol version remains 1.

@@ -25,6 +25,9 @@ async def test_mcp_tools_expose_mutation_schemas_and_annotations():
                      "delete_architecture_object", "create_room", "detect_rooms",
                      "get_furniture_frame", "list_furniture_parts", "create_cabinet",
                      "update_furniture_object", "delete_furniture_object",
+                     "get_project_settings", "update_project_settings",
+                     "list_furniture_presets", "get_furniture_preset",
+                     "create_cabinet_from_preset",
                      "plan_kitchen_run", "apply_kitchen_run", "validate_kitchen",
                      "update_kitchen_run", "delete_kitchen_run"}
     read_only = {"homecad_status", "get_model_info", "list_objects", "find_objects",
@@ -34,7 +37,8 @@ async def test_mcp_tools_expose_mutation_schemas_and_annotations():
         assert tools[name].annotations.openWorldHint is False
     for name in {"get_wall_frame", "detect_rooms"}:
         assert tools[name].annotations.readOnlyHint is True
-    for name in {"get_furniture_frame", "list_furniture_parts", "plan_kitchen_run", "validate_kitchen"}:
+    for name in {"get_furniture_frame", "list_furniture_parts", "plan_kitchen_run", "validate_kitchen",
+                 "get_project_settings", "list_furniture_presets", "get_furniture_preset"}:
         assert tools[name].annotations.readOnlyHint is True
     create_tools = {"create_group", "create_face", "create_edge", "create_box", "create_circle",
                     "create_arc", "create_polygon", "boolean_operation"}
@@ -50,7 +54,7 @@ async def test_mcp_tools_expose_mutation_schemas_and_annotations():
         assert tools[name].annotations.destructiveHint is False
         assert tools[name].annotations.idempotentHint is False
         assert tools[name].annotations.openWorldHint is False
-    for name in {"create_cabinet", "apply_kitchen_run"}:
+    for name in {"create_cabinet", "apply_kitchen_run", "create_cabinet_from_preset"}:
         assert tools[name].annotations.readOnlyHint is False
         assert tools[name].annotations.destructiveHint is False
         assert tools[name].annotations.idempotentHint is False
@@ -59,7 +63,7 @@ async def test_mcp_tools_expose_mutation_schemas_and_annotations():
         assert tools[name].annotations.destructiveHint is True
         assert tools[name].annotations.idempotentHint is False
         assert tools[name].annotations.openWorldHint is False
-    for name in {"update_furniture_object", "delete_furniture_object",
+    for name in {"update_furniture_object", "delete_furniture_object", "update_project_settings",
                  "update_kitchen_run", "delete_kitchen_run"}:
         assert tools[name].annotations.readOnlyHint is False
         assert tools[name].annotations.destructiveHint is True
@@ -238,6 +242,50 @@ def test_kitchen_methods_require_capability():
         "protocol_version": 1, "ruby_extension_version": "0.7.0",
         "capabilities": ["kitchen.run.v1", "unknown.future.capability.v9"],
     })
+
+
+def test_project_defaults_and_preset_methods_require_separate_capabilities():
+    old = {"protocol_version": 1, "ruby_extension_version": "0.7.1",
+           "capabilities": ["furniture.core.v1", "kitchen.run.v1"]}
+    for method in ("get_project_settings", "update_project_settings",
+                   "list_furniture_presets", "get_furniture_preset",
+                   "create_cabinet_from_preset"):
+        with pytest.raises(BridgeError) as missing:
+            BridgeClient._check_method_capability(method, old)
+        assert missing.value.category == "unsupported_operation"
+    new = {**old, "capabilities": old["capabilities"] +
+           ["project.defaults.v1", "furniture.presets.v1", "future.v9"]}
+    for method in ("get_project_settings", "update_project_settings",
+                   "list_furniture_presets", "get_furniture_preset",
+                   "create_cabinet_from_preset"):
+        BridgeClient._check_method_capability(method, new)
+
+
+@pytest.mark.asyncio
+async def test_project_defaults_and_presets_forward_parameters(monkeypatch):
+    from homecad_mcp.server import (get_project_settings, update_project_settings,
+                                    list_furniture_presets, get_furniture_preset,
+                                    create_cabinet_from_preset)
+    calls = []
+
+    async def fake(method, params):
+        calls.append((method, params))
+        return {"status": "success", "operation": method, "revision": 1}
+
+    monkeypatch.setattr("homecad_mcp.server._scene_call", fake)
+    await get_project_settings()
+    await update_project_settings({"panel_thickness_mm": 20})
+    await list_furniture_presets()
+    await get_furniture_preset("base_open.v1")
+    await create_cabinet_from_preset("base_open.v1", {"width_mm": 700})
+    assert calls == [
+        ("get_project_settings", {}),
+        ("update_project_settings", {"changes": {"panel_thickness_mm": 20}}),
+        ("list_furniture_presets", {}),
+        ("get_furniture_preset", {"preset_id": "base_open.v1"}),
+        ("create_cabinet_from_preset", {"preset_id": "base_open.v1",
+                                        "overrides": {"width_mm": 700}}),
+    ]
 
 
 def test_service_zones_require_additive_capability_only_when_used():

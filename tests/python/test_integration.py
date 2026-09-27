@@ -346,6 +346,8 @@ async def test_mcp_stdio_starts_and_lists_supported_tools():
                 "update_architecture_object", "delete_architecture_object", "create_room",
         "detect_rooms", "get_furniture_frame", "list_furniture_parts", "create_cabinet",
         "update_furniture_object", "delete_furniture_object",
+        "get_project_settings", "update_project_settings", "list_furniture_presets",
+        "get_furniture_preset", "create_cabinet_from_preset",
         "plan_kitchen_run", "apply_kitchen_run", "validate_kitchen",
         "update_kitchen_run", "delete_kitchen_run"}
             status = await session.call_tool("homecad_status", {})

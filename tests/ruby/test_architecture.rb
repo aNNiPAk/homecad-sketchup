@@ -179,7 +179,10 @@ module Sketchup
       @entities = Entities.new(self)
       @next_id = 100
       @events = []
+      @attributes = {}
     end
+    def set_attribute(dictionary, key, value) = (@attributes[dictionary] ||= {})[key] = value
+    def get_attribute(dictionary, key, default = nil) = @attributes.fetch(dictionary, {}).fetch(key, default)
     def model = self
     def next_id = (@next_id += 1)
     def find_entity_by_persistent_id(id) = entities.find { |entity| entity.persistent_id == id }

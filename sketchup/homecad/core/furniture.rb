@@ -34,7 +34,7 @@ module HomeCAD
     DETAIL_LEVELS = %w[concept construction].freeze
     TYPES = %w[furniture.cabinet].freeze
     CREATE_KEYS = %w[width_mm depth_mm height_mm panel_thickness_mm back_thickness_mm
-                     shelf_z_mm fronts detail_level placement name].freeze
+                     shelf_z_mm fronts detail_level placement name material_id front_material_id].freeze
     CHANGE_KEYS = (CREATE_KEYS - ['name'] + ['name']).freeze
     TOLERANCE_MM = 0.01
 
@@ -72,6 +72,13 @@ module HomeCAD
       values['placement'] = validate_placement!(model, values.fetch('placement', {
         'mode' => 'world', 'origin_mm' => [0, 0, 0], 'rotation_degrees' => 0
       }), values)
+      %w[material_id front_material_id].each do |key|
+        next unless values.key?(key)
+
+        value = values[key]
+        invalid!("#{key} must be null or a nonempty identifier up to 128 characters") unless
+          value.nil? || (value.is_a?(String) && !value.strip.empty? && value.length <= 128)
+      end
       values
     end
 
@@ -316,7 +323,7 @@ module HomeCAD
         'count' => part_schedule(values).length, 'units' => 'mm' }
     end
 
-    def self.create_cabinet(model, params)
+    def self.create_cabinet(model, params, options = {})
       Primitives.check_keys!(params, CREATE_KEYS)
       values = validate_params!(model, params)
       frame = frame_for(model, values)
@@ -327,6 +334,7 @@ module HomeCAD
         group.transformation = transformation(frame)
         Metadata.create!(group, type: 'furniture.cabinet')
         FurnitureData.write(group, params: values)
+        FurnitureData.write_source(group, options[:source]) if options[:source]
         build_geometry!(group, values)
         mutation_result('create_cabinet', created: [group], revision: 1)
       end
@@ -343,11 +351,18 @@ module HomeCAD
       invalid!('changes must be a nonempty object') unless changes.is_a?(Hash) && !changes.empty?
       invalid!("unsupported changes: #{(changes.keys - CHANGE_KEYS).join(', ')}") unless (changes.keys - CHANGE_KEYS).empty?
       proposed = validate_params!(model, changes, defaults: current)
+      source = FurnitureData.read_source(entity)
+      if source['preset_id']
+        overrides = source['overrides'].merge(changes)
+        source = source.merge('overrides' => overrides,
+          'inherited_fields' => source['inherited_fields'] - changes.keys)
+      end
       new_transform = transformation(frame_for(model, proposed))
       old_frame = frame_for(model, current)
       old_transform = transformation(old_frame)
       placement_changed = !WallAttachment.transformations_equal?(old_transform, new_transform)
-      domain_state_changed = FurnitureData.canonical(current) != FurnitureData.canonical(proposed)
+      domain_state_changed = FurnitureData.canonical(current) != FurnitureData.canonical(proposed) ||
+        FurnitureData.canonical(FurnitureData.read_source(entity)) != FurnitureData.canonical(source)
       return mutation_result('update_furniture_object', updated: [entity], revision: Metadata.read(entity)['revision']) unless domain_state_changed
 
       geometry_changed = %w[width_mm depth_mm height_mm panel_thickness_mm back_thickness_mm shelf_z_mm fronts detail_level].any? do |key|
@@ -355,6 +370,7 @@ module HomeCAD
       end
       Operation.run('Update cabinet', model: model) do
         FurnitureData.write(entity, params: proposed)
+        FurnitureData.write_source(entity, source) if source['preset_id']
         entity.transformation = new_transform if placement_changed
         build_geometry!(entity, proposed) if geometry_changed
         entity.name = proposed['name'] if current['name'] != proposed['name']

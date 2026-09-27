@@ -1,6 +1,7 @@
 require_relative 'test_furniture'
 require_relative '../../sketchup/homecad/core/service_zones'
 require_relative '../../sketchup/homecad/core/kitchen'
+require_relative '../../sketchup/homecad/core/corner_kitchen'
 
 class KitchenTest < Minitest::Test
   def setup

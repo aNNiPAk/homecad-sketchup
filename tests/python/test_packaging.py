@@ -17,6 +17,7 @@ def test_rbz_contains_loader_and_matching_support_folder():
             "metadata", "mutation", "geometry", "primitives", "mutations", "architecture",
             "wall_attachment", "project_settings", "furniture_data", "furniture",
             "furniture_presets", "service_zones", "kitchen", "cutlist",
+            "multi_wall_attachment", "corner_kitchen",
         }
         assert {f"homecad/core/{name}.rb" for name in required_core_files} <= names
         assert all(name == "homecad.rb" or name.startswith("homecad/") for name in names)

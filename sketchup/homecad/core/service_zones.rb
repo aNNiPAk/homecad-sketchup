@@ -107,12 +107,16 @@ module HomeCAD
                        [0, params['width_mm'], 0, params['depth_mm'], 0, params['height_mm']])]
                 when 'kitchen.run'
                   params = KitchenData.read(entity)
-                  frame = frame_from_wall(Architecture.wall_entity!(model,
-                    { 'homecad_id' => params['wall_id'] })[1], side: params['side'])
-                  Kitchen.occupied_rectangles(params).map do |part|
-                    [part['key'], box(*frame, [part['offset_mm'], part['offset_mm'] + part['width_mm'],
-                      part['depth_offset_mm'], part['depth_offset_mm'] + part['depth_mm'],
-                      part['bottom_mm'], part['bottom_mm'] + part['height_mm']])]
+                  if params['layout_type'] == 'l_shaped'
+                    CornerKitchen.occupied_boxes(model, params)
+                  else
+                    frame = frame_from_wall(Architecture.wall_entity!(model,
+                      { 'homecad_id' => params['wall_id'] })[1], side: params['side'])
+                    Kitchen.occupied_rectangles(params).map do |part|
+                      [part['key'], box(*frame, [part['offset_mm'], part['offset_mm'] + part['width_mm'],
+                        part['depth_offset_mm'], part['depth_offset_mm'] + part['depth_mm'],
+                        part['bottom_mm'], part['bottom_mm'] + part['height_mm']])]
+                    end
                   end
                 else next
                 end

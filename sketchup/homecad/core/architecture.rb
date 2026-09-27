@@ -410,6 +410,7 @@ module HomeCAD
       wall = nil
       rooms_to_update = []
       attachments_to_move = []
+      multi_wall_to_rebuild = []
       if type == 'architecture.wall'
         frame, proposed = validate_wall_params!(proposed)
         hosts = hosted_for(model, data['homecad_id'])
@@ -420,6 +421,11 @@ module HomeCAD
           constraint!('wall update would invalidate a hosted object') if cut['offset_mm'] + cut['width_mm'] > frame.length_mm + TOLERANCE_MM[:cut] || cut['bottom_mm'] + cut['height_mm'] > proposed['height_mm'] + TOLERANCE_MM[:cut]
         end
         attachments_to_move = WallAttachment.plan_relocation(model, data['homecad_id'], proposed)
+        multi_wall_to_rebuild = MultiWallAttachment.dependents_for(model, data['homecad_id']).map do |dependent|
+          require_mutable!(dependent)
+          CornerKitchen.preflight_host_update(model, dependent,
+            data['homecad_id'] => proposed)
+        end
         rooms_for(model, data['homecad_id']).each do |room|
           require_mutable!(room)
           room_params = ArchitectureData.read_params(room)
@@ -471,6 +477,10 @@ module HomeCAD
             cabinet.transformation = transform
             updated << cabinet
           end
+          multi_wall_to_rebuild.each do |item|
+            CornerKitchen.apply_host_update!(model, item)
+            updated << item[0]
+          end
         when *HOSTED_TYPES
           ArchitectureData.write(group, params: proposed, relationships: { 'wall_id' => data['wall_id'] })
           group.entities.clear!
@@ -513,7 +523,8 @@ module HomeCAD
       dependents = []
       if type == 'architecture.wall'
         dependents = hosted_for(model, metadata['homecad_id']) + rooms_for(model, metadata['homecad_id']) +
-                     WallAttachment.dependents_for(model, metadata['homecad_id'])
+                     WallAttachment.dependents_for(model, metadata['homecad_id']) +
+                     MultiWallAttachment.dependents_for(model, metadata['homecad_id'])
         dependents.each { |entity| require_mutable!(entity) }
         constraint!('wall has hosted objects; set cascade=true to delete them') if dependents.any? && !cascade
       elsif HOSTED_TYPES.include?(type)

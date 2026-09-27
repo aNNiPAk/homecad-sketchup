@@ -56,6 +56,7 @@ METHOD_CAPABILITIES = {
     "create_cabinet_from_preset": "furniture.presets.v1",
     "generate_cutlist": "manufacturing.cutlist.v1",
     "plan_kitchen_run": "kitchen.run.v1",
+    "plan_corner_kitchen_run": "kitchen.corner_run.v1",
     "apply_kitchen_run": "kitchen.run.v1",
     "validate_kitchen": "kitchen.run.v1",
     "update_kitchen_run": "kitchen.run.v1",
@@ -190,10 +191,28 @@ class BridgeClient:
                 "Install a HomeCAD RBZ with Kitchen service zones and restart SketchUp.",
                 -32601,
             )
+        if BridgeClient._uses_corner_run(method, params or {}) and "kitchen.corner_run.v1" not in capabilities:
+            raise BridgeError(
+                "unsupported_operation",
+                "SketchUp bridge does not advertise 'kitchen.corner_run.v1'. "
+                "Install a HomeCAD RBZ with L-shaped KitchenRun support and restart SketchUp.",
+                -32601,
+            )
+
+    @staticmethod
+    def _uses_corner_run(method: str, params: dict[str, Any]) -> bool:
+        if method == "apply_kitchen_run":
+            plan = params.get("plan")
+            return isinstance(plan, dict) and isinstance(plan.get("params"), dict) and \
+                plan["params"].get("layout_type") == "l_shaped"
+        if method == "update_kitchen_run":
+            changes = params.get("changes")
+            return isinstance(changes, dict) and bool({"legs", "corner"} & changes.keys())
+        return False
 
     @staticmethod
     def _uses_service_zones(method: str, params: dict[str, Any]) -> bool:
-        if method == "plan_kitchen_run":
+        if method in ("plan_kitchen_run", "plan_corner_kitchen_run"):
             values = params
         elif method == "apply_kitchen_run":
             plan = params.get("plan")
@@ -206,6 +225,10 @@ class BridgeClient:
             return False
         modules = values.get("modules")
         constraints = values.get("constraints")
-        return (isinstance(modules, list) and any(
+        direct = (isinstance(modules, list) and any(
             isinstance(item, dict) and "service_clearance_mm" in item for item in modules
         )) or (isinstance(constraints, dict) and constraints.get("require_service_clearance") is True)
+        legs = values.get("legs")
+        return direct or (isinstance(legs, list) and any(
+            isinstance(leg, dict) and BridgeClient._uses_service_zones("plan_kitchen_run", leg)
+            for leg in legs))

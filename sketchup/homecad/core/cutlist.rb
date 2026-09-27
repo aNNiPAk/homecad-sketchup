@@ -54,7 +54,12 @@ module HomeCAD
     def self.kitchen_records(model, run)
       records = []
       warnings = []
-      run['modules'].each do |item|
+      modules = if run['layout_type'] == 'l_shaped'
+        run['legs'].flat_map { |leg| leg['modules'].map { |item| [leg['key'], item] } }
+      else
+        run['modules'].map { |item| [nil, item] }
+      end
+      modules.each do |leg_key, item|
         if Kitchen::APPLIANCE_TYPES.include?(item['type'])
           warnings << "module #{item['key']} is a concept appliance; no manufacturing parts inferred"
           next
@@ -68,9 +73,25 @@ module HomeCAD
           'material_id' => item['material_id'], 'front_material_id' => item['front_material_id'],
           'manufacturing' => item.fetch('manufacturing', {})
         })
-        key = "module:#{item['key']}"
+        key = [leg_key && "leg:#{leg_key}", "module:#{item['key']}"].compact.join('/')
         object_id = run.fetch('semantic_objects', {}).fetch(key, {})['homecad_id']
         records.concat(records_for(params, object_id, 'kitchen.module', prefix: key))
+      end
+      if run['layout_type'] == 'l_shaped' && run['corner']['mode'] == 'blind_cabinet'
+        corner = run['corner']
+        first, second = run['legs']
+        accessed = corner['access_leg'] == first['key'] ? first : second
+        other = corner['access_leg'] == first['key'] ? second : first
+        other_wall = Architecture.wall_entity!(model, { 'homecad_id' => other['wall_id'] })[1]
+        width = corner['access_leg'] == first['key'] ? corner['span_first_mm'] : corner['span_second_mm']
+        width -= other_wall['thickness_mm'] / 2.0
+        depth = accessed['modules'].first['depth_mm']
+        cabinet = Furniture.validate_params!(model, {
+          'width_mm' => width, 'depth_mm' => depth, 'height_mm' => run['height_mm'],
+          'detail_level' => 'construction' })
+        object_id = run.fetch('semantic_objects', {}).fetch('corner', {})['homecad_id']
+        records.concat(records_for(cabinet, object_id, 'kitchen.corner_cabinet', prefix: 'corner'))
+        warnings << 'blind corner join is a concept carcass; verify access and panel takeoff before fabrication'
       end
       [records, warnings]
     end

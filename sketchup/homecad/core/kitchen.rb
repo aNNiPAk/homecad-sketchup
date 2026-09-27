@@ -19,6 +19,11 @@ module HomeCAD
     end
 
     def self.write(entity, params)
+      if params['layout_type'] == 'l_shaped'
+        entity.set_attribute(Metadata::DICTIONARY, KEY, JSON.generate(canonical(params)))
+        MultiWallAttachment.sync!(entity, params['legs'].map { |leg| leg['wall_id'] })
+        return
+      end
       entity.set_attribute(Metadata::DICTIONARY, KEY, JSON.generate(canonical(params)))
       entity.set_attribute(Metadata::DICTIONARY, 'wall_id', params['wall_id'])
       WallAttachment.sync!(entity, placement: {
@@ -80,6 +85,7 @@ module HomeCAD
       when 'validate_kitchen' then validate(model, params)
       when 'update_kitchen_run' then update(model, params)
       when 'delete_kitchen_run' then delete(model, params)
+      when 'plan_corner_kitchen_run' then CornerKitchen.plan(model, params)
       else raise Runtime::BridgeError.new(-32601, 'unsupported_operation', "unknown kitchen method: #{method}")
       end
     end
@@ -295,6 +301,27 @@ module HomeCAD
                                 position['key'], data['homecad_id'])
         end
       end
+      MultiWallAttachment.dependents_for(model, wall_id).each do |entity|
+        data = Metadata.read(entity)
+        next if data['homecad_id'] == exclude_id
+
+        frame = ServiceZones.frame_from_wall(Architecture.wall_entity!(model,
+          { 'homecad_id' => wall_id })[1], side: side)
+        other = CornerKitchen.occupied_boxes(model, KitchenData.read(entity))
+        occupied.each do |position|
+          volume = ServiceZones.box(*frame,
+            [position['offset_mm'], position['offset_mm'] + position['width_mm'],
+             position['depth_offset_mm'], position['depth_offset_mm'] + position['depth_mm'],
+             position['bottom_mm'], position['bottom_mm'] + position['height_mm']])
+          other.each do |key, box|
+            next unless ServiceZones.overlap?(volume, box)
+
+            conflicts << conflict('cabinet_collision',
+              "module #{position['key']} overlaps corner KitchenRun #{key}",
+              position['key'], data['homecad_id'], key)
+          end
+        end
+      end
       conflicts
     end
 
@@ -420,6 +447,7 @@ module HomeCAD
       Primitives.check_keys!(request, %w[plan])
       supplied = request['plan']
       invalid!('plan must be an object from plan_kitchen_run') unless supplied.is_a?(Hash) && supplied['params'].is_a?(Hash)
+      return CornerKitchen.apply(model, supplied) if supplied['params']['layout_type'] == 'l_shaped'
       fresh = plan(model, editable_input(supplied['params']))
       constraint!('kitchen plan is stale or changed; plan again') unless supplied == fresh
       constraint!('kitchen plan has conflicts') unless fresh['conflicts'].empty?
@@ -522,6 +550,7 @@ module HomeCAD
     def self.validate(model, request)
       Primitives.check_keys!(request, %w[target])
       root, values = resolve_run(model, request['target'])
+      return CornerKitchen.validate(model, root, values) if values['layout_type'] == 'l_shaped'
       id = Metadata.read(root)['homecad_id']
       current = plan(model, editable_input(values), exclude_id: id)
       { 'homecad_id' => id, 'valid' => current['conflicts'].empty?,
@@ -533,6 +562,7 @@ module HomeCAD
     def self.update(model, request)
       Primitives.check_keys!(request, %w[target changes])
       root, current = resolve_run(model, request['target'])
+      return CornerKitchen.update(model, root, current, request['changes']) if current['layout_type'] == 'l_shaped'
       Architecture.require_mutable!(root)
       changes = request['changes']
       invalid!('changes must be a nonempty object') unless changes.is_a?(Hash) && !changes.empty?

@@ -451,6 +451,14 @@ async def plan_kitchen_run(wall: dict, start_mm: float, end_mm: float,
     return await _scene_call("plan_kitchen_run", params)
 
 
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def plan_corner_kitchen_run(legs: list[dict], corner: dict,
+                                  name: str = "L-shaped kitchen run") -> dict:
+    """Plan one managed L-shaped base KitchenRun across two connected walls."""
+    return await _scene_call("plan_corner_kitchen_run",
+                             {"legs": legs, "corner": corner, "name": name})
+
+
 @mcp.tool(annotations=CREATE_TOOL)
 async def apply_kitchen_run(plan: dict) -> dict:
     """Apply a current conflict-free kitchen plan in one SketchUp Undo operation."""

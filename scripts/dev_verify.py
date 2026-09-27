@@ -30,6 +30,7 @@ SMOKES = {
     "m5": (["scripts/smoke_m5.py", "--confirm-disposable"], "kitchen.run.v1"),
     "m53": (["scripts/smoke_m53.py", "--confirm-disposable"], "furniture.presets.v1"),
     "m54": (["scripts/smoke_m54.py", "--confirm-disposable"], "manufacturing.cutlist.v1"),
+    "m55": (["scripts/smoke_m55.py", "--confirm-disposable"], "kitchen.corner_run.v1"),
 }
 
 FOCUSED_RUBY_TESTS = {
@@ -40,6 +41,7 @@ FOCUSED_RUBY_TESTS = {
     "m5": "tests/ruby/test_kitchen.rb",
     "m53": "tests/ruby/test_project_settings.rb",
     "m54": "tests/ruby/test_cutlist.rb",
+    "m55": "tests/ruby/test_corner_kitchen.rb",
 }
 
 
@@ -71,6 +73,7 @@ def _run_full_tests(root: Path, env: dict[str, str]) -> list[dict]:
             "tests/ruby/test_furniture.rb", "tests/ruby/test_kitchen.rb")],
         (["ruby", "tests/ruby/test_project_settings.rb"], "Ruby project settings tests"),
         (["ruby", "tests/ruby/test_cutlist.rb"], "Ruby cutlist tests"),
+        (["ruby", "tests/ruby/test_corner_kitchen.rb"], "Ruby corner kitchen tests"),
         (["uv", "run", "--project", "mcp", "python", "scripts/build_rbz.py"], "RBZ build"),
     ]:
         row = _run(command, root=root, env=env, label=label)

@@ -15,6 +15,7 @@ module HomeCAD
         project.defaults.v1
         kitchen.run.v1
         kitchen.service_zone.v1
+        kitchen.corner_run.v1
       ].freeze
 
       def self.dispatch(request, handshake_done:)
@@ -63,7 +64,7 @@ module HomeCAD
             params.fetch('overrides', {}))
           Furniture.create_cabinet(active_model!, preset_params, source: source)
         when 'generate_cutlist' then Cutlist.generate(active_model!, params)
-        when 'plan_kitchen_run', 'apply_kitchen_run', 'validate_kitchen',
+        when 'plan_kitchen_run', 'plan_corner_kitchen_run', 'apply_kitchen_run', 'validate_kitchen',
              'update_kitchen_run', 'delete_kitchen_run'
           Kitchen.dispatch(active_model!, method, params)
         else

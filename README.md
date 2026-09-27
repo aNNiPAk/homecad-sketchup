@@ -113,6 +113,14 @@ generic carcass records where possible. Concept appliances produce a warning and
 manufacturing parts. Results are bounded to 100 records per call and do not depend on SketchUp
 child entity IDs or current Furniture detail level.
 
+M5.5 adds `plan_corner_kitchen_run` for a single generated L-shaped `kitchen.run` across two
+connected, perpendicular Walls. The two ordered base legs face the same interior. The corner
+may be a closed void or a concept blind cabinet with access from a selected leg. Each leg and
+corner uses stable semantic HomeCAD UUIDs. Applying, updating, deleting, and Wall-driven
+regeneration keep the existing `apply_kitchen_run`/`update_kitchen_run`/`delete_kitchen_run`
+workflow and one Undo operation. The original one-Wall KitchenRun schema and tools remain
+available. M5.5 does not yet join a continuous countertop; that follows in M5.6.
+
 M5 adds `kitchen.run.v1` and a two-phase workflow: `plan_kitchen_run` reads a HomeCAD Wall and returns ordered module positions, an optional bounded end filler, warnings, and conflicts without editing the model. `apply_kitchen_run` accepts that exact plan, recomputes it against the current Wall and scene, then creates one generated KitchenRun in one Undo operation. `validate_kitchen` is read-only; `update_kitchen_run` and `delete_kitchen_run` edit the semantic root. The run follows its Wall through the shared attachment projection, and primitive tools cannot edit generated Kitchen children.
 
 Each straight run has one tier: base, wall, or tall. Base modules include shelves, drawers, sink, hob, dishwasher, and oven; tall modules include storage and fridge; wall modules include shelves and lift front. Appliance and sink/hob geometry is conceptual. A base run may generate a single straight countertop, plinth, and end filler. All placement lengths are millimeters in the Wall U frame. The planner accepts separate start/end clearances and explicit coverage, countertop, opening-clearance, and depth constraints. See [the M5 contract](tests/contracts/m5.md) and [M5 decisions](docs/M5_DECISIONS.md) for module schemas and current limitations.

@@ -29,6 +29,7 @@ async def test_mcp_tools_expose_mutation_schemas_and_annotations():
                      "list_furniture_presets", "get_furniture_preset",
                      "create_cabinet_from_preset",
                      "generate_cutlist",
+                     "plan_corner_kitchen_run",
                      "plan_kitchen_run", "apply_kitchen_run", "validate_kitchen",
                      "update_kitchen_run", "delete_kitchen_run"}
     read_only = {"homecad_status", "get_model_info", "list_objects", "find_objects",
@@ -38,7 +39,8 @@ async def test_mcp_tools_expose_mutation_schemas_and_annotations():
         assert tools[name].annotations.openWorldHint is False
     for name in {"get_wall_frame", "detect_rooms"}:
         assert tools[name].annotations.readOnlyHint is True
-    for name in {"get_furniture_frame", "list_furniture_parts", "plan_kitchen_run", "validate_kitchen",
+    for name in {"get_furniture_frame", "list_furniture_parts", "plan_kitchen_run",
+                 "plan_corner_kitchen_run", "validate_kitchen",
                  "get_project_settings", "list_furniture_presets", "get_furniture_preset",
                  "generate_cutlist"}:
         assert tools[name].annotations.readOnlyHint is True
@@ -244,6 +246,42 @@ def test_kitchen_methods_require_capability():
         "protocol_version": 1, "ruby_extension_version": "0.7.0",
         "capabilities": ["kitchen.run.v1", "unknown.future.capability.v9"],
     })
+
+
+def test_corner_run_capability_is_additive_and_old_runs_remain_supported():
+    old = {"capabilities": ["kitchen.run.v1", "kitchen.service_zone.v1"]}
+    new = {"capabilities": old["capabilities"] + ["kitchen.corner_run.v1"]}
+    BridgeClient._check_method_capability("plan_kitchen_run", old)
+    BridgeClient._check_method_capability("apply_kitchen_run", old,
+        {"plan": {"params": {"wall_id": "legacy"}}})
+    with pytest.raises(BridgeError, match="kitchen.corner_run.v1"):
+        BridgeClient._check_method_capability("plan_corner_kitchen_run", old)
+    with pytest.raises(BridgeError, match="kitchen.corner_run.v1"):
+        BridgeClient._check_method_capability("apply_kitchen_run", old,
+            {"plan": {"params": {"layout_type": "l_shaped"}}})
+    with pytest.raises(BridgeError, match="kitchen.corner_run.v1"):
+        BridgeClient._check_method_capability("update_kitchen_run", old,
+            {"changes": {"corner": {"mode": "void"}}})
+    BridgeClient._check_method_capability("plan_corner_kitchen_run", new)
+    BridgeClient._check_method_capability("apply_kitchen_run", new,
+        {"plan": {"params": {"layout_type": "l_shaped"}}})
+
+
+@pytest.mark.asyncio
+async def test_corner_planner_forwards_two_legs(monkeypatch):
+    from homecad_mcp.server import plan_corner_kitchen_run
+    calls = []
+
+    async def fake(method, params):
+        calls.append((method, params))
+        return {"params": {"layout_type": "l_shaped"}, "conflicts": []}
+
+    monkeypatch.setattr("homecad_mcp.server._scene_call", fake)
+    legs = [{"key": "a", "wall": {"homecad_id": "w1"}},
+            {"key": "b", "wall": {"homecad_id": "w2"}}]
+    corner = {"mode": "void", "span_first_mm": 900, "span_second_mm": 900}
+    await plan_corner_kitchen_run(legs, corner, "L")
+    assert calls == [("plan_corner_kitchen_run", {"legs": legs, "corner": corner, "name": "L"})]
 
 
 def test_project_defaults_and_preset_methods_require_separate_capabilities():

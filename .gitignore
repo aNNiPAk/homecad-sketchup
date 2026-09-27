@@ -7,3 +7,5 @@ __pycache__/
 dist/
 .homecad-dev/
 *.rbz
+References/EasyKitchen/
+docs/EASYKITCHEN_RESEARCH.md

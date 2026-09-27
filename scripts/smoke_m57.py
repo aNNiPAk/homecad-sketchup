@@ -59,8 +59,11 @@ async def run() -> None:
                 family = (await call("list_hardware_catalog"))["families"][0]["id"]
                 made = await mutate("create_cabinet", {
                     "width_mm": 600, "depth_mm": 560, "height_mm": 720,
-                    "fronts": [{"key": "front", "kind": "drawer_front", "x_mm": 0,
-                                "z_mm": 0, "width_mm": 600, "height_mm": 720}],
+                    "fronts": [
+                        {"key": "front", "kind": "drawer_front", "x_mm": 0,
+                         "z_mm": 0, "width_mm": 600, "height_mm": 360},
+                        {"key": "lower_front", "kind": "drawer_front", "x_mm": 0,
+                         "z_mm": 360, "width_mm": 600, "height_mm": 360}],
                 })
                 cabinet_id = made["created"][0]["identity"]["homecad_id"]
                 target = {"homecad_id": cabinet_id}
@@ -69,6 +72,9 @@ async def run() -> None:
                     "base_thickness_mm": 8,
                     "slide": {"family_id": family, "sku": "PROJECT-SLIDE-450",
                               "nominal_length_mm": 450, "side_clearance_mm": 12}}
+                lower = {**drawer, "key": "lower", "front_key": "lower_front",
+                         "bottom_mm": 400, "height_mm": 180, "depth_mm": 380,
+                         "slide": {**drawer["slide"], "nominal_length_mm": 380}}
                 proposal = await call("plan_cabinet_drawer", {"target": target, "drawer": drawer})
                 if len(proposal["parts"]) != 5 or proposal["hardware"][0]["unit"] != "pair":
                     raise RuntimeError("drawer preview has an invalid composition")
@@ -76,25 +82,56 @@ async def run() -> None:
                 await expect_error("plan_cabinet_drawer", {"target": target, "drawer": invalid},
                                    "constraint_violation")
                 updated = await mutate("update_furniture_object", {"target": target,
-                    "changes": {"drawers": [drawer]}})
+                    "changes": {"drawers": [drawer, lower]}})
                 if updated["revision"] != 2:
                     raise RuntimeError("Cabinet revision did not increase once")
                 obj = await call("get_object", {"target": target})
-                if obj.get("parameters", {}).get("drawers", [{}])[0].get("key") != "upper":
+                if [item["key"] for item in obj.get("parameters", {}).get("drawers", [])] != ["upper", "lower"]:
                     raise RuntimeError("drawer parameters were not persisted")
                 children = await call("list_objects", {"parent": target,
                     "include_generated": True, "limit": 100})
                 child_names = {item["name"] for item in children["objects"]}
                 if not {"drawer:upper/base", "drawer:upper/left_side",
                         "drawer:upper/right_side", "drawer:upper/back",
-                        "drawer:upper/front"} <= child_names:
-                    raise RuntimeError("SketchUp did not generate all five drawer panels")
+                        "drawer:upper/front", "drawer:lower/base",
+                        "drawer:lower/left_side", "drawer:lower/right_side",
+                        "drawer:lower/back", "drawer:lower/front"} <= child_names:
+                    raise RuntimeError("SketchUp did not generate all ten drawer panels")
+                part_records = await call("list_furniture_parts", {"target": target})
+                parts = {part["part_key"]: part for part in part_records["parts"]
+                         if part["part_key"].startswith("drawer:")}
+                if len(parts) != 10:
+                    raise RuntimeError("parameter schedule did not produce ten drawer panels")
+                for child in children["objects"]:
+                    key = child["name"]
+                    if key not in parts:
+                        continue
+                    part = parts[key]
+                    info = await call("get_object", {"target": {
+                        "persistent_id": child["identity"]["persistent_id"]}})
+                    box = info["bbox_mm"]
+                    if part["part_kind"] == "drawer_base":
+                        size = [part["width_mm"], part["height_mm"], part["thickness_mm"]]
+                    elif part["part_kind"] == "drawer_side":
+                        size = [part["thickness_mm"], part["width_mm"], part["height_mm"]]
+                    else:
+                        size = [part["width_mm"], part["thickness_mm"], part["height_mm"]]
+                    expected_max = [origin + length for origin, length in zip(part["origin_mm"], size)]
+                    if any(abs(actual - expected) > 1 for actual, expected in zip(box["min"], part["origin_mm"])) or \
+                            any(abs(actual - expected) > 1 for actual, expected in zip(box["max"], expected_max)):
+                        raise RuntimeError(f"{key} bounds disagree with parameter schedule: {box}")
                 schedule = await call("generate_cutlist", {"target": target})
-                drawer_rows = [row for row in schedule["records"]
-                               if row["part_key"].startswith("drawer:upper/")]
-                if len(drawer_rows) != 6 or sum(row["record_kind"] == "hardware"
-                                                 for row in drawer_rows) != 1:
+                drawer_rows = [row for row in schedule["records"] if row["part_key"].startswith("drawer:")]
+                if len(drawer_rows) != 12 or sum(row["record_kind"] == "hardware"
+                                                  for row in drawer_rows) != 2:
                     raise RuntimeError("drawer cutlist has missing or duplicate records")
+                if not schedule["warnings"] or "project-selected" not in schedule["warnings"][0]:
+                    raise RuntimeError("drawer cutlist lacks preliminary-manufacturing warning")
+                for key, part in parts.items():
+                    record = next(row for row in drawer_rows if row["part_key"] == key)
+                    if any(record[field] != part[field] for field in ("width_mm", "thickness_mm")) or \
+                            record["length_mm"] != part["height_mm"]:
+                        raise RuntimeError(f"{key} cutlist dimensions disagree with geometry")
                 purchased = next(row for row in drawer_rows if row["record_kind"] == "hardware")
                 if purchased["quantity"] != 1 or purchased["unit"] != "pair":
                     raise RuntimeError("slide pair quantity is incorrect")
@@ -110,9 +147,17 @@ async def run() -> None:
                 await undo()
                 await expect_error("update_furniture_object", {"target": target,
                     "changes": {"drawers": [invalid]}}, "constraint_violation")
+                await expect_error("update_furniture_object", {"target": target,
+                    "changes": {"fronts": []}}, "constraint_violation")
                 unchanged = await call("get_object", {"target": target})
                 if unchanged["metadata"]["revision"] != 2:
                     raise RuntimeError("failed drawer update changed Cabinet revision")
+                if unchanged["parameters"] != obj["parameters"]:
+                    raise RuntimeError("failed drawer update changed Cabinet parameters")
+                preserved = await call("list_objects", {"parent": target,
+                    "include_generated": True, "limit": 100})
+                if {part["name"] for part in preserved["objects"]} != child_names:
+                    raise RuntimeError("failed drawer update changed generated parts")
                 await undo()
                 cleared = await call("get_object", {"target": target})
                 if cleared.get("parameters", {}).get("drawers"):

@@ -218,8 +218,8 @@ module HomeCAD
       true
     end
 
-    # Returns the boundary quads of a rectilinear wall solid. No SketchUp boolean API is used.
-    def self.wall_boundary_quads(length, thickness, height, cuts)
+    # The same occupied grid drives wall geometry and analytic spatial checks.
+    def self.wall_grid(length, thickness, height, cuts)
       us = ([0.0, length] + cuts.flat_map { |cut| [cut['offset_mm'], cut['offset_mm'] + cut['width_mm']] }).uniq.sort
       zs = ([0.0, height] + cuts.flat_map { |cut| [cut['bottom_mm'], cut['bottom_mm'] + cut['height_mm']] }).uniq.sort
       half = thickness / 2.0
@@ -241,6 +241,27 @@ module HomeCAD
           v > v0 - TOLERANCE_MM[:cut] && v < v1 + TOLERANCE_MM[:cut]
         end
       end
+      [us, vs, zs, occupied]
+    end
+
+    def self.wall_occupied_cells(length, thickness, height, cuts)
+      us, vs, zs, occupied = wall_grid(length, thickness, height, cuts)
+      cells = []
+      (us.length - 1).times do |i|
+        (vs.length - 1).times do |j|
+          (zs.length - 1).times do |k|
+            center = [(us[i] + us[i + 1]) / 2.0, (vs[j] + vs[j + 1]) / 2.0,
+                      (zs[k] + zs[k + 1]) / 2.0]
+            cells << [us[i], us[i + 1], vs[j], vs[j + 1], zs[k], zs[k + 1]] if occupied.call(*center)
+          end
+        end
+      end
+      cells
+    end
+
+    # Returns the boundary quads of a rectilinear wall solid. No SketchUp boolean API is used.
+    def self.wall_boundary_quads(length, thickness, height, cuts)
+      us, vs, zs, occupied = wall_grid(length, thickness, height, cuts)
       faces = []
       nu = us.length - 1
       nv = vs.length - 1

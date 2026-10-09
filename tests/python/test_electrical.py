@@ -1,5 +1,7 @@
 import asyncio
 import shutil
+import subprocess
+import sys
 import pytest
 
 from homecad_mcp.connection import BridgeClient, METHOD_CAPABILITIES
@@ -9,6 +11,12 @@ from homecad_mcp import server
 from test_integration import ROOT
 
 NAMES = {name for name, cap in METHOD_CAPABILITIES.items() if cap.startswith('electrical.')}
+
+def test_smoke_requires_disposable_confirmation():
+    result = subprocess.run([sys.executable, 'scripts/smoke_m6.py'], cwd=ROOT,
+                            capture_output=True, text=True)
+    assert result.returncode == 2
+    assert '--confirm-disposable' in result.stderr
 
 @pytest.mark.asyncio
 async def test_schemas_and_annotations():

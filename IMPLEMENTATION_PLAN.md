@@ -787,6 +787,12 @@ appliance service zones
 
 # 18. Этап 6 — Electrical
 
+M6 (0.13.0): ElectricalPoint/Outlet/Switch/JunctionBox и Circuit. Поддерживаются
+явные Wall/world frames, заданные проектом размеры, цепи в metadata модели,
+назначение точек и read-only validation. Контракт: tests/contracts/m6.md.
+CableRoute, DistributionPanel, Consumer, appliance requirements и инженерные расчёты
+перенесены в M6.1; приведённый ниже список описывает весь Electrical roadmap.
+
 Создать объекты:
 
 ```text

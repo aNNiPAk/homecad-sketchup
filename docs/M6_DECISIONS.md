@@ -34,6 +34,10 @@ floor/ceiling world bounds, circuit transfer and Undo, Wall rotation, support-lo
 warning after an opening, cascade deletion with circuit revision and full cleanup.
 Final acceptance is recorded only after the packaged run and GitHub CI.
 
+Packaged verification on SketchUp 26.2.243 passed the full Python/Ruby suite and
+RBZ build (22 test commands). The dedicated model smoke passed, all created UUIDs
+disappeared after Undo, and development links were restored without cleanup errors.
+
 Frame normalization retains unit/orthogonal vectors within 1e-12 to avoid floating
 roundoff creating revisions or Undo entries when a normalized world frame is
 reapplied. This tolerance is dimensionless and separate from the 0.01 mm geometry

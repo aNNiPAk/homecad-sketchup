@@ -55,6 +55,7 @@ jobs:
           ruby tests/ruby/test_corner_kitchen.rb
           ruby tests/ruby/test_kitchen_variants.rb
           ruby tests/ruby/test_hardware.rb
+          ruby tests/ruby/test_electrical.rb
           ruby tests/ruby/test_kitchen.rb
 
       - name: Build RBZ

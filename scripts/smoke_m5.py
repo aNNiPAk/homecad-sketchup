@@ -170,6 +170,8 @@ async def run(output: Path) -> None:
                 restored_hob, _ = await call("get_object", {"target": {"homecad_id": hob_id}})
                 if restored_hob["metadata"]["revision"] != 1:
                     raise SmokeError("Undo did not restore module revision")
+                from smoke_m58 import verify_composition
+                await verify_composition(call, undo_one, expect_error, output)
             finally:
                 cleanup_failed = False
                 while pending_undos > 0:

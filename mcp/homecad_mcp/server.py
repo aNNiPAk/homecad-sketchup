@@ -85,16 +85,28 @@ async def delete_electrical_point(target: dict) -> dict:
     return await _scene_call("delete_electrical_point", {"target": target})
 
 @mcp.tool(annotations=READ_ONLY_TOOL)
-async def validate_electrical(target: dict | None = None, limit: int = 50, offset: int = 0) -> dict:
+async def validate_electrical(target: dict | None = None, limit: int = 50, offset: int = 0,
+                              ruleset: str | None = None, constraints: dict | None = None) -> dict:
     """Read bounded placement/support findings for HomeCAD volumes; no code compliance claim."""
-    return await _scene_call("validate_electrical", {"target": target, "limit": limit, "offset": offset})
+    params = {"target": target, "limit": limit, "offset": offset}
+    if ruleset is not None:
+        params["ruleset"] = ruleset
+    if constraints is not None:
+        params["constraints"] = constraints
+    return await _scene_call("validate_electrical", params)
 
 @mcp.tool(annotations=CREATE_TOOL)
 async def create_circuit(name: str, voltage_v: float | None = None, cable_label: str | None = None,
-                         protection_label: str | None = None, description: str | None = None) -> dict:
+                         protection_label: str | None = None, description: str | None = None,
+                         panel_id: str | None = None, require_panel: bool | None = None) -> dict:
     """Create a logical project circuit with caller-selected labels, without geometry."""
-    return await _scene_call("create_circuit", {"name": name, "voltage_v": voltage_v,
-        "cable_label": cable_label, "protection_label": protection_label, "description": description})
+    params = {"name": name, "voltage_v": voltage_v,
+        "cable_label": cable_label, "protection_label": protection_label, "description": description}
+    if panel_id is not None:
+        params["panel_id"] = panel_id
+    if require_panel is not None:
+        params["require_panel"] = require_panel
+    return await _scene_call("create_circuit", params)
 
 @mcp.tool(annotations=READ_ONLY_TOOL)
 async def get_circuit(target: dict) -> dict:
@@ -112,9 +124,110 @@ async def update_circuit(target: dict, changes: dict) -> dict:
     return await _scene_call("update_circuit", {"target": target, "changes": changes})
 
 @mcp.tool(annotations=MUTATE_TOOL)
-async def delete_circuit(target: dict, detach_points: bool = False) -> dict:
+async def delete_circuit(target: dict, detach_points: bool = False, detach_routes: bool = False) -> dict:
     """Delete an empty circuit, or explicitly detach all member points in the same Undo."""
-    return await _scene_call("delete_circuit", {"target": target, "detach_points": detach_points})
+    params = {"target": target, "detach_points": detach_points}
+    if detach_routes:
+        params["detach_routes"] = detach_routes
+    return await _scene_call("delete_circuit", params)
+
+@mcp.tool(annotations=CREATE_TOOL)
+async def create_distribution_panel(placement: ElectricalPlacement, dimensions_mm: ElectricalDimensions,
+                                     name: str = "Distribution panel", description: str | None = None,
+                                     sku: str | None = None) -> dict:
+    """Create an explicitly sized panel concept in an Electrical Wall/world frame."""
+    return await _scene_call("create_distribution_panel", _electrical_params(placement, dimensions_mm, name, 1, sku, description))
+
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def get_distribution_panel(target: dict) -> dict:
+    """Read a panel and derive assigned Circuit IDs."""
+    return await _scene_call("get_distribution_panel", {"target": target})
+
+@mcp.tool(annotations=MUTATE_TOOL)
+async def update_distribution_panel(target: dict, changes: dict) -> dict:
+    """Update a panel's semantic dimensions/placement in one Undo."""
+    return await _scene_call("update_distribution_panel", {"target": target, "changes": changes})
+
+@mcp.tool(annotations=MUTATE_TOOL)
+async def delete_distribution_panel(target: dict, detach_circuits: bool = False) -> dict:
+    """Delete an empty panel or explicitly detach its circuits without deleting them."""
+    return await _scene_call("delete_distribution_panel", {"target": target, "detach_circuits": detach_circuits})
+
+@mcp.tool(annotations=MUTATE_TOOL)
+async def assign_circuit_to_panel(target: dict, panel_id: str | None) -> dict:
+    """Set a Circuit's panel UUID; null detaches it."""
+    return await _scene_call("assign_circuit_to_panel", {"target": target, "panel_id": panel_id})
+
+@mcp.tool(annotations=CREATE_TOOL)
+async def create_consumer(name: str, source_object_id: str, connection: Literal["outlet", "direct"] = "outlet",
+                           rated_power_w: float | None = None, voltage_v: float | None = None,
+                           point_id: str | None = None, description: str | None = None) -> dict:
+    """Create a logical Consumer of an existing kitchen.appliance UUID; ratings stay explicit."""
+    return await _scene_call("create_consumer", {"name": name, "source_object_id": source_object_id,
+        "connection": connection, "rated_power_w": rated_power_w, "voltage_v": voltage_v,
+        "point_id": point_id, "description": description})
+
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def get_consumer(target: dict) -> dict:
+    """Read a Consumer and derive circuit through its point."""
+    return await _scene_call("get_consumer", {"target": target})
+
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def list_consumers(limit: int = 50, offset: int = 0) -> dict:
+    """Read a bounded page of logical Consumers."""
+    return await _scene_call("list_consumers", {"limit": limit, "offset": offset})
+
+@mcp.tool(annotations=MUTATE_TOOL)
+async def update_consumer(target: dict, changes: dict) -> dict:
+    """Update explicit Consumer data and affected circuit graph revisions atomically."""
+    return await _scene_call("update_consumer", {"target": target, "changes": changes})
+
+@mcp.tool(annotations=MUTATE_TOOL)
+async def delete_consumer(target: dict) -> dict:
+    """Delete a logical Consumer without changing its appliance geometry."""
+    return await _scene_call("delete_consumer", {"target": target})
+
+@mcp.tool(annotations=MUTATE_TOOL)
+async def connect_consumer(target: dict, point_id: str | None) -> dict:
+    """Connect to a compatible ElectricalPoint; null disconnects."""
+    return await _scene_call("connect_consumer", {"target": target, "point_id": point_id})
+
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def find_unpowered_consumers(limit: int = 50, offset: int = 0) -> dict:
+    """Read missing-point, missing-circuit and incompatible-connection statuses."""
+    return await _scene_call("find_unpowered_consumers", {"limit": limit, "offset": offset})
+
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def get_circuit_load(target: dict) -> dict:
+    """Sum only explicit known consumer power; current is an informational project estimate."""
+    return await _scene_call("get_circuit_load", {"target": target})
+
+@mcp.tool(annotations=CREATE_TOOL)
+async def create_cable_route(name: str, circuit_id: str | None, path_mm: list[list[float]],
+                             description: str | None = None) -> dict:
+    """Create a 2..128 world-point concept polyline; no cable diameter or sizing is inferred."""
+    return await _scene_call("create_cable_route", {"name": name, "circuit_id": circuit_id,
+        "path_mm": path_mm, "description": description})
+
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def get_cable_route(target: dict) -> dict:
+    """Read a concept route and derive its polyline length in millimeters."""
+    return await _scene_call("get_cable_route", {"target": target})
+
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def list_cable_routes(limit: int = 50, offset: int = 0) -> dict:
+    """Read a bounded page of concept cable routes."""
+    return await _scene_call("list_cable_routes", {"limit": limit, "offset": offset})
+
+@mcp.tool(annotations=MUTATE_TOOL)
+async def update_cable_route(target: dict, changes: dict) -> dict:
+    """Regenerate a concept route while preserving its root UUID."""
+    return await _scene_call("update_cable_route", {"target": target, "changes": changes})
+
+@mcp.tool(annotations=MUTATE_TOOL)
+async def delete_cable_route(target: dict) -> dict:
+    """Delete a concept route and update its Circuit graph revision."""
+    return await _scene_call("delete_cable_route", {"target": target})
 
 @mcp.tool(annotations=MUTATE_TOOL)
 async def assign_to_circuit(target: dict, circuit_id: str | None) -> dict:

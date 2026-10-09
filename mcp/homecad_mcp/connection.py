@@ -14,6 +14,24 @@ from .errors import BridgeError
 logger = logging.getLogger(__name__)
 
 METHOD_CAPABILITIES = {
+    "create_distribution_panel": "electrical.panels.v1",
+    "get_distribution_panel": "electrical.panels.v1",
+    "update_distribution_panel": "electrical.panels.v1",
+    "delete_distribution_panel": "electrical.panels.v1",
+    "assign_circuit_to_panel": "electrical.panels.v1",
+    "create_consumer": "electrical.consumers.v1",
+    "get_consumer": "electrical.consumers.v1",
+    "list_consumers": "electrical.consumers.v1",
+    "update_consumer": "electrical.consumers.v1",
+    "delete_consumer": "electrical.consumers.v1",
+    "connect_consumer": "electrical.consumers.v1",
+    "find_unpowered_consumers": "electrical.consumers.v1",
+    "get_circuit_load": "electrical.load.v1",
+    "create_cable_route": "electrical.routes.v1",
+    "get_cable_route": "electrical.routes.v1",
+    "list_cable_routes": "electrical.routes.v1",
+    "update_cable_route": "electrical.routes.v1",
+    "delete_cable_route": "electrical.routes.v1",
     "create_outlet": "electrical.points.v1",
     "create_switch": "electrical.points.v1",
     "create_electrical_point": "electrical.points.v1",
@@ -200,6 +218,21 @@ class BridgeClient:
             )
         if method == "assign_to_circuit" and "electrical.points.v1" not in capabilities:
             raise BridgeError("unsupported_operation", "assign_to_circuit requires 'electrical.points.v1'", -32601)
+        request = params or {}
+        added = []
+        changes = request.get("changes") if method == "update_circuit" else request
+        if method in {"create_circuit", "update_circuit"} and isinstance(changes, dict):
+            if "panel_id" in changes:
+                added.append("electrical.panels.v1")
+            if "require_panel" in changes:
+                added.append("electrical.rules.v1")
+        if method == "delete_circuit" and request.get("detach_routes"):
+            added.append("electrical.routes.v1")
+        if method == "validate_electrical" and ("ruleset" in request or "constraints" in request):
+            added.append("electrical.rules.v1")
+        for capability in added:
+            if capability not in capabilities:
+                raise BridgeError("unsupported_operation", f"'{method}' requires '{capability}' for the requested fields", -32601)
         if BridgeClient._uses_service_zones(method, params or {}) and "kitchen.service_zone.v1" not in capabilities:
             raise BridgeError(
                 "unsupported_operation",

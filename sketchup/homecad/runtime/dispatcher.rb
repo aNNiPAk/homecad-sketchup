@@ -20,6 +20,11 @@ module HomeCAD
         kitchen.variants.v1
         electrical.points.v1
         electrical.circuits.v1
+        electrical.panels.v1
+        electrical.consumers.v1
+        electrical.routes.v1
+        electrical.load.v1
+        electrical.rules.v1
       ].freeze
 
       def self.dispatch(request, handshake_done:)
@@ -60,6 +65,13 @@ module HomeCAD
              'assign_to_circuit', 'create_circuit', 'get_circuit', 'list_circuits',
              'update_circuit', 'delete_circuit'
           Electrical.dispatch(active_model!, method, params)
+        when 'create_distribution_panel', 'get_distribution_panel', 'update_distribution_panel',
+             'delete_distribution_panel', 'assign_circuit_to_panel', 'create_consumer',
+             'get_consumer', 'list_consumers', 'update_consumer', 'delete_consumer',
+             'connect_consumer', 'find_unpowered_consumers', 'get_circuit_load',
+             'create_cable_route', 'get_cable_route', 'list_cable_routes',
+             'update_cable_route', 'delete_cable_route'
+          ElectricalSystem.dispatch(active_model!, method, params)
         when 'get_project_settings' then empty!(params); ProjectSettings.read(active_model!)
         when 'update_project_settings' then
           Primitives.check_keys!(params, %w[changes])

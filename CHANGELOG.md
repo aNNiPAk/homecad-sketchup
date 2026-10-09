@@ -4,6 +4,8 @@
 
 ### Added
 
+- M6.1 DistributionPanels, logical appliance Consumers, concept CableRoutes, Circuit load summaries and generic consistency rules; five additive Electrical capabilities. DomainHooks repairs source/panel lifecycle in the same Undo operation, without Kitchen coupling.
+
 - M6 Electrical points in explicit Wall/world frames, model-level UUID circuits, atomic membership management, occupied-cell support checks and full 3D HomeCAD volume collision findings. Adds electrical.points.v1 and electrical.circuits.v1.
 
 - M5.7 original versioned hardware catalog, read-only drawer planning, generic wooden drawer panels within Cabinet, and explicit slide-pair cutlist records under `furniture.hardware.v1`.
@@ -45,6 +47,8 @@
 - M0 bootstrap with Python MCP server, SketchUp Ruby extension, local transport, handshake, tests, and RBZ packaging.
 
 ### Changed
+
+- Matched Python/Ruby version is 0.14.0 for M6.1; M6.0 request compatibility and protocol 1 are preserved.
 
 - Matched Python/Ruby version is 0.13.0 for M6; protocol stays 1. Cable routes, panels, consumers and engineering sizing are deferred to M6.1.
 

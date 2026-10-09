@@ -2,7 +2,7 @@ require 'json'
 require 'socket'
 
 module HomeCAD
-  VERSION = '0.13.0'
+  VERSION = '0.14.0'
   PROTOCOL_VERSION = 1
 end
 

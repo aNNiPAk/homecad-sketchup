@@ -85,7 +85,12 @@ Groups in Wall or world frames, logical project circuits, atomic assignment and
 bounded read-only placement validation. Points follow Wall transforms; cuts may
 produce support warnings. Dimensions, slide-independent electrical labels and voltage
 are project inputs, without automatic engineering sizing. See [M6 contract](tests/contracts/m6.md).
-Cable routes, distribution panels and consumers are reserved for M6.1.
+M6.1 (0.14.0) adds generated distribution panels and concept cable routes, logical
+Consumers linked to existing kitchen.appliance UUIDs, derived circuit load summaries
+and generic consistency rules. Panel assignment is owned by Circuit; Consumer circuit
+membership comes only through its ElectricalPoint. Appliance removal/type change
+cascades Consumers through DomainHooks in the same Undo operation. Power, voltage,
+cable/protection labels remain explicit project data. See [M6.1 contract](tests/contracts/m61.md).
 
 ## Furniture Core (M4)
 

@@ -38,6 +38,9 @@ HomeCAD architecture invariants
 - WallAttachment is a derived cross-domain projection. It must not depend on FurnitureData, ArchitectureData, ElectricalData, or any single domain storage implementation.
 - A domain object's revision tracks canonical semantic state changes, not only visible geometry or transform changes.
 - Kitchen planning is read-only. Applying a Kitchen plan must revalidate current Wall revisions and scene conflicts, then regenerate managed geometry in one HomeCAD operation.
+- Consumer circuit membership is derived only through Consumer.point_id -> ElectricalPoint.circuit_id. Circuit.panel_id owns Panel assignment; never maintain an independent editable Panel circuit list.
+- Electrical ratings and cable/protection labels are explicit project inputs. Never infer appliance power or claim automatic regulatory sizing from concept geometry.
+- Cross-domain Electrical lifecycle repairs run through DomainHooks inside the outer operation; Kitchen must not directly depend on Electrical.
 
 HomeCAD automated SketchUp verification
 

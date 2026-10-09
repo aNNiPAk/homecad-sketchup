@@ -10,7 +10,7 @@ from homecad_mcp.errors import BridgeError
 from homecad_mcp import server
 from test_integration import ROOT
 
-NAMES = {name for name, cap in METHOD_CAPABILITIES.items() if cap.startswith('electrical.')}
+NAMES = {name for name, cap in METHOD_CAPABILITIES.items() if cap in {'electrical.points.v1', 'electrical.circuits.v1'}}
 
 def test_smoke_requires_disposable_confirmation():
     result = subprocess.run([sys.executable, 'scripts/smoke_m6.py'], cwd=ROOT,

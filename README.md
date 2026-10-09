@@ -1,5 +1,9 @@
 # HomeCAD for SketchUp
 
+Current version: **0.15.0**. M5.8 shares Furniture construction parts and cutlists
+for Kitchen cabinets, preserves Kitchen semantic identities/M6 appliance sources,
+and supports explicit straight countertop cutouts. See [composition contract](tests/contracts/m58.md).
+
 HomeCAD is a local MCP interface for inspecting and safely editing a SketchUp scene. M3 adds parametric Architecture, M4 adds Furniture Core, and M5 adds planned Kitchen runs. M2 primitives remain a low-level developer/fallback API. The roadmap is in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
 ## Requirements
@@ -17,7 +21,7 @@ uv sync --project mcp
 uv run --project mcp python scripts/build_rbz.py
 ```
 
-Install `dist\homecad.rbz` with **SketchUp → Extensions → Extension Manager → Install Extension**, then restart SketchUp. The Ruby Console should show `[HomeCAD] INFO listening on 127.0.0.1:37941`. Confirm that `homecad_status.ruby_extension_version` says `0.7.1` and advertises `kitchen.run.v1` and `kitchen.service_zone.v1` before using Kitchen service zones.
+Install `dist\homecad.rbz` with **SketchUp → Extensions → Extension Manager → Install Extension**, then restart SketchUp. The Ruby Console should show `[HomeCAD] INFO listening on 127.0.0.1:37941`. Confirm that `homecad_status.ruby_extension_version` says `0.15.0` and advertises `kitchen.run.v1`, `kitchen.service_zone.v1` and `kitchen.composition.v1` before using current Kitchen composition fields. Repository development uses the automated junction/package verification commands below.
 
 The M0 connection check remains available:
 
@@ -104,7 +108,7 @@ M4 adds `furniture.core.v1` and a parametric `furniture.cabinet`. Use `create_ca
 
 Cabinet local origin is back-left-bottom. Local X is width, Y runs from back to front, and Z is vertical. World placement uses a global-Z rotation. Wall placement stores offset, bottom, side, and clearance in the Wall's local frame; the Cabinet follows Wall translation, rotation, and direction changes without changing these parameters. Wall shortening/height changes are rejected if the Cabinet no longer fits. Deleting a Wall with an attached Cabinet requires `cascade=true` and removes both in one Undo operation.
 
-`construction` detail creates separate generated carcass, optional back, shelf, and front panel Groups. Set `back_thickness_mm` to `0` to omit the back; shelves then start at the rear plane and span the full depth. `concept` detail uses an open-front case envelope; configured fronts are plane faces at the front plane, without a coincident envelope face behind them. `list_furniture_parts` is parameter-derived and stable across these detail levels. The Furniture core does not model hinges, hardware, or drawer boxes; Kitchen composition is provided separately by M5.
+`construction` detail creates separate generated carcass, optional back, shelf, front and configured wooden drawer panel Groups. Set `back_thickness_mm` to `0` to omit the back; shelves then start at the rear plane and span the full depth. `concept` detail uses an open-front case envelope; configured fronts are plane faces at the front plane, without a coincident envelope face behind them. `list_furniture_parts` is parameter-derived and stable across these detail levels. Furniture Core owns the drawer panels and slide-pair schedule described below; it does not model hinges, rail geometry, drilling or motion. Kitchen cabinet-like modules reuse this same core.
 
 Run the M4 smoke only in a disposable SketchUp model. It checks construction/concept LOD, positive/negative Wall sides, same-transform detach/reattach, Wall relocation and fit rejection, a no-back Cabinet, screenshots, cascade-delete Undo, and cleanup of all test identities:
 

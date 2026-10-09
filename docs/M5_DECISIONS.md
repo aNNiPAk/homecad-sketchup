@@ -9,6 +9,54 @@ uses part origins instead of reading Cabinet metadata from a Kitchen semantic ro
 New plans snapshot project thickness/material defaults; legacy unversioned module
 records retain their effective fixed defaults when inspected or renamed.
 
+### Composition and straight cutouts
+
+The detailed contract is [M5.8](../tests/contracts/m58.md). New module definitions
+snapshot project settings; layout defaults remain original HomeCAD concept values,
+not manufacturer installation claims. Sink/hob housings omit their top panel;
+dishwasher/fridge keep only an appliance envelope. Drawer front thickness is part
+of the module outer depth, so shelves/drawers do not expand collision/service bounds.
+Furniture Core remains the owner of all panel and drawer mathematics.
+
+CountertopCutouts shares rectangle validation and inner-loop generation between
+straight and L-shaped runs. Straight cuts use Wall U and outward-from-wall-face
+coordinates, including negative-V placement. Cutouts are explicit and shaped tops
+remain concept_shaped manufacturing records. Countertop descriptor changes preserve
+UUID and increment its revision; a run name change leaves it untouched.
+
+Native verification found that an appliance base Face can have a negative Z normal.
+Appliance extrusion now uses the existing positive-Z Furniture helper, as do worktops.
+The official [Face pushpull/loops API](https://ruby.sketchup.com/Sketchup/Face.html)
+is the source of truth; fake geometry alone did not establish this behavior.
+
+M6 source identity stays Kitchen-owned. Neighboring cabinet regeneration keeps
+appliance UUID/type and Consumer membership; retyping/removing an appliance uses
+the existing scoped DomainHooks cascade, without a Kitchen-to-Electrical dependency.
+
+### M5.8 verification
+
+On 2026-10-09, the runtime/smoke implementation committed through d4fa701 was verified
+with M5 --fast, M5 --packaged and M6 --packaged on fresh dedicated SketchUp 26.2.243
+processes, version 0.15.0.
+Each packaged run passed 24 commands: Python 80 tests, 22 standalone Ruby files
+(895 test runs / 9449 assertions including inherited regressions), and RBZ build.
+Both native smokes exited 0, completed Undo cleanup and restored dev links with no
+cleanup errors. CI for d4fa701 also passed (GitHub Actions run 37928784055).
+
+Native M5 measured generated cabinet part bounds against the cutlist, confirmed
+appliance outer bounds, two real straight countertop holes by Face area, and the
+existing L-shaped hole after shared generator extraction. Shelf/drawer updates,
+stable semantic identities, invalid-cut rejection and Undo were checked. M6
+confirmed source UUID preservation and retype cascade with Consumer restoration
+through Undo. The focused Ruby regression additionally changes neighboring cabinet
+internals while checking that its appliance Consumer remains unchanged.
+
+Reviewed front/iso/top images show shelves inside the case, two drawer fronts
+distinct from open shelf cases, appliance alignment, real straight holes and one
+continuous L countertop with its hole. Closed fronts obscure internal drawer panels
+in these views; their dimensions/placement are verified by native measurements,
+not inferred from pixel variation. Pictures/reports remain ignored local artifacts.
+
 ## Implementation plan
 
 1. Reuse the M3 Wall frame and M4 Cabinet generator for a managed KitchenRun.

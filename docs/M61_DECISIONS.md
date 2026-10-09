@@ -42,3 +42,11 @@ the graph owns these revisions, not a cached load calculation.
 Rulesets are named Ruby implementations, initially generic only. Validation preserves
 M6 response keys and adds structured consistency findings. National RU/EU numeric
 rules, wiring routes derived from building code, and M7 Lighting are outside scope.
+
+Official [Entities API](https://ruby.sketchup.com/Sketchup/Entities.html) confirms
+add_line returns an Edge, used for the original generated polyline. The M6 API/reference
+inspection remains applicable; no third-party Electrical domain code is copied.
+Fast verification on SketchUp 26.2.243 passed the existing M6 flow plus M6.1 graph,
+Wall movement, source regeneration/retyping and native Undo cleanup. The saved back
+view was visually inspected: Panel, outlet, continuous concept route and appliance
+were visible from positive_v; no cable diameter or engineering accuracy is implied.

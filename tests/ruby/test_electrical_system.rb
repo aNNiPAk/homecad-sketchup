@@ -123,4 +123,63 @@ class ElectricalSystemTest < ElectricalTest
     records.first['parameters']['point_id']=switch; HomeCAD::ElectricalConsumers.write(@model,records)
     assert_equal 'incompatible_connection',HomeCAD::ElectricalConsumers.unpowered(@model,{})['consumers'].first['status']
   end
+
+  def test_direct_consumer_and_disconnect_update_circuit_graph_once
+    id=consumer(500)
+    HomeCAD::ElectricalConsumers.update(@model,'target'=>target(id),'changes'=>{'connection'=>'direct'})
+    p=HomeCAD::Electrical.create(@model,request,'connection_point')['created'].first['homecad_id']; c=circuit
+    HomeCAD::Electrical.assign(@model,'target'=>target(p),'circuit_id'=>c)
+    before=HomeCAD::Circuits.resolve(@model,target(c))['revision']
+    HomeCAD::ElectricalConsumers.connect(@model,'target'=>target(id),'point_id'=>p)
+    assert_equal before+1,HomeCAD::Circuits.resolve(@model,target(c))['revision']
+    assert_empty HomeCAD::ElectricalConsumers.unpowered(@model,{})['consumers']
+    @model.events.clear
+    HomeCAD::ElectricalConsumers.connect(@model,'target'=>target(id),'point_id'=>p)
+    assert_empty @model.events
+    HomeCAD::ElectricalConsumers.connect(@model,'target'=>target(id),'point_id'=>nil)
+    assert_equal before+2,HomeCAD::Circuits.resolve(@model,target(c))['revision']
+    assert_equal 'missing_point',HomeCAD::ElectricalConsumers.unpowered(@model,{})['consumers'].first['status']
+  end
+
+  def test_route_limits_and_full_serialization_of_128_points
+    c=circuit; path=128.times.map { |i| [i*10,0,0] }
+    result=HomeCAD::ElectricalRoutes.create(@model,'name'=>'Long','circuit_id'=>c,'path_mm'=>path)
+    route=result['created'].first
+    assert_equal 128,route['parameters']['path_mm'].length
+    assert_equal 1270,route['length_mm']
+    @model.events.clear
+    [[],[[0,0,0]],[[0,0,0],[0,0,0]],129.times.map { |i| [i,0,0] }].each do |bad|
+      assert_raises(HomeCAD::Runtime::BridgeError) { HomeCAD::ElectricalRoutes.update(@model,'target'=>target(route['homecad_id']),'changes'=>{'path_mm'=>bad}) }
+    end
+    assert_empty @model.events
+    assert_equal 1,HomeCAD::Metadata.read(entity(route['homecad_id']))['revision']
+  end
+
+  def test_failed_cross_domain_hook_aborts_source_and_consumer_state
+    id=consumer(500); c=circuit; p=point
+    HomeCAD::Electrical.assign(@model,'target'=>target(p),'circuit_id'=>c)
+    HomeCAD::ElectricalConsumers.connect(@model,'target'=>target(id),'point_id'=>p)
+    before=HomeCAD::Circuits.resolve(@model,target(c)); original=HomeCAD::ElectricalConsumers.resolve(@model,target(id))
+    @model.events.clear
+    HomeCAD::ElectricalConsumers.stub(:write,->(*) { raise 'injected registry failure' }) do
+      assert_raises(HomeCAD::Runtime::BridgeError) do
+        HomeCAD::Kitchen.update(@model,'target'=>target(@run),
+          'changes'=>{'modules'=>[{'key'=>'dishwasher','type'=>'base_shelves','width_mm'=>600}]})
+      end
+    end
+    assert_equal [:start,:abort],@model.events.map(&:first)
+    assert_equal before,HomeCAD::Circuits.resolve(@model,target(c))
+    assert_equal original,HomeCAD::ElectricalConsumers.resolve(@model,target(id))
+    assert_equal 'kitchen.appliance',HomeCAD::Metadata.read(HomeCAD::ElectricalConsumers.source(@model,appliance))['type']
+  end
+
+  def test_generic_rules_are_readonly_and_bounded
+    consumer; before=@model.instance_variable_get(:@attributes).dup
+    @model.events.clear
+    findings=HomeCAD::ElectricalRules.validate(@model,'limit'=>1,'constraints'=>{'require_panel'=>true})
+    assert_equal 1,findings['findings'].length
+    assert_empty @model.events
+    assert_equal before,@model.instance_variable_get(:@attributes)
+    assert_raises(HomeCAD::Runtime::BridgeError) { HomeCAD::ElectricalRules.validate(@model,'ruleset'=>'RU') }
+  end
 end

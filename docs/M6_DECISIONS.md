@@ -28,3 +28,13 @@ References inspected (no code copied):
 
 Circuit labels and voltage are explicit project data, not verified engineering
 selection. Quantity is the number of positions in a block, not a geometry multiplier.
+
+The first fresh SketchUp 26.2.243 fast smoke verified Wall points on both sides,
+floor/ceiling world bounds, circuit transfer and Undo, Wall rotation, support-loss
+warning after an opening, cascade deletion with circuit revision and full cleanup.
+Final acceptance is recorded only after the packaged run and GitHub CI.
+
+Frame normalization retains unit/orthogonal vectors within 1e-12 to avoid floating
+roundoff creating revisions or Undo entries when a normalized world frame is
+reapplied. This tolerance is dimensionless and separate from the 0.01 mm geometry
+tolerance. Tests cover oblique normals, not only axis-aligned points.

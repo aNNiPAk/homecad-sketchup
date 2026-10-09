@@ -32,7 +32,8 @@ module HomeCAD
     def self.vector(value, label)
       Geometry.point_mm(value, label) # shared finite, 3-coordinate validation
       length = Math.sqrt(value.sum { |part| part * part })
-      Primitives.invalid!("#{label} must be nonzero") if length < 1e-9
+      Primitives.invalid!("#{label} must have a finite nonzero length") unless length.finite? && length >= 1e-9
+      return value.map(&:to_f) if (length - 1.0).abs <= 1e-12
       value.map { |part| part.to_f / length }
     end
 
@@ -64,7 +65,7 @@ module HomeCAD
         placement['origin_mm'] = placement['origin_mm'].map(&:to_f)
         normal = vector(placement['normal'], 'normal'); up = vector(placement['up'], 'up')
         projection = SceneVolumes.dot(up, normal)
-        corrected = up.zip(normal).map { |x, y| x - projection * y }
+        corrected = projection.abs <= 1e-12 ? up : up.zip(normal).map { |x, y| x - projection * y }
         placement['normal'] = normal; placement['up'] = vector(corrected, 'up must not be parallel to normal')
       else Primitives.invalid!('placement.mode must be wall or world')
       end

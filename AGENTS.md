@@ -39,6 +39,7 @@ HomeCAD architecture invariants
 - A domain object's revision tracks canonical semantic state changes, not only visible geometry or transform changes.
 - Kitchen planning is read-only. Applying a Kitchen plan must revalidate current Wall revisions and scene conflicts, then regenerate managed geometry in one HomeCAD operation.
 - Consumer circuit membership is derived only through Consumer.point_id -> ElectricalPoint.circuit_id. Circuit.panel_id owns Panel assignment; never maintain an independent editable Panel circuit list.
+- Circuit membership changes must respect locks of old/new Panels and increment each affected Panel revision once in the same operation. Source cascade must be scoped to UUIDs affected by the current mutation.
 - Electrical ratings and cable/protection labels are explicit project inputs. Never infer appliance power or claim automatic regulatory sizing from concept geometry.
 - Cross-domain Electrical lifecycle repairs run through DomainHooks inside the outer operation; Kitchen must not directly depend on Electrical.
 

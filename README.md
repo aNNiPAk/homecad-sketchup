@@ -92,6 +92,12 @@ membership comes only through its ElectricalPoint. Appliance removal/type change
 cascades Consumers through DomainHooks in the same Undo operation. Power, voltage,
 cable/protection labels remain explicit project data. See [M6.1 contract](tests/contracts/m61.md).
 
+M6.1.1 hardening adds lock-aware Panel membership revisions and Panel collision
+validation. `get_circuit` includes derived Consumers/routes; `find_unpowered_consumers`
+includes connection context, and `get_electrical_ruleset` describes available generic
+checks. Source cascade affects only Kitchen UUIDs touched by the current mutation;
+unrelated damaged references remain visible to validation.
+
 ## Furniture Core (M4)
 
 M4 adds `furniture.core.v1` and a parametric `furniture.cabinet`. Use `create_cabinet`, `get_furniture_frame`, and `list_furniture_parts` to create and inspect a cabinet; `update_furniture_object` changes semantic parameters and regenerates its generated panels. `delete_furniture_object` returns a pre-delete tombstone. Cabinet root identity is preserved by updates, and primitive mutation tools cannot edit the Cabinet or nested generated parts.

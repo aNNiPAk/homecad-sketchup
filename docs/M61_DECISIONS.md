@@ -6,8 +6,10 @@ M6.1 builds on that implementation; no M6 history is rewritten.
 
 Panels are generated root Groups using existing Electrical center/frame and support
 helpers. Circuit.panel_id owns assignment; Panel.circuit_ids is derived. Panel
-revision tracks its own parameters/placement and Wall relocation, while assignment
-changes Circuit revision. Explicit detach_circuits removes panel links but preserves
+revision tracks parameters/placement, Wall relocation and derived circuit membership.
+Circuit create/assign/transfer/detach/delete preflight locks of all affected Panels
+and increment each affected Panel once inside the same outer operation; no-op
+assignment does not increment revisions. Explicit detach_circuits removes panel links but preserves
 Circuit records. Wall cascade detaches them within the shared operation.
 
 Consumer is a model JSON record, not an appliance copy. source_object_id is an
@@ -18,7 +20,9 @@ Power/voltage are explicit project inputs, unknown values stay null. Connect che
 point type; it never silently selects another point. Generic validation also reports
 manually corrupted or later missing references.
 
-DomainHooks checks sources after an outer mutation, before commit. Disappeared or
+DomainHooks checks only Kitchen source UUIDs affected by the current mutation,
+including semantic children of deleted Kitchen roots, before commit. Existing orphan
+records survive unrelated mutations and remain available to validation. Disappeared or
 retyped appliance sources cascade their Consumers. Regeneration preserving appliance
 UUID/type preserves Consumer. No Kitchen -> Electrical dependency is added.
 Consumer deletion/changes bump affected circuits; Point transfer uses M6's existing
@@ -71,3 +75,19 @@ including detach/voltage mismatch/route update/Wall relocation/source lifecycle 
 native Undo cleanup, passed. The packaged PNG contained visible Panel, outlet,
 polyline and appliance and was inspected; camera restoration and pixel variation
 checks passed. Development links were restored with no cleanup errors.
+
+## M6.1.1 hardening
+
+Panel circuit membership changes preflight both old/new Panel locks and increment
+Panel revision once per affected Panel, in the Circuit's single Undo operation.
+No-op assignment does not open an operation. Deleted Panels use tombstones.
+Panel collision findings use full 3D OBB SAT against shared HomeCAD volumes and
+Electrical points/Panels; self and nonpenetrating contact are excluded. Kitchen
+service-zone obstacle selection retains its existing contract.
+Consumer source cascade is limited to affected semantic Kitchen UUIDs, including
+children of deleted Kitchen roots. Unrelated pre-existing orphans remain diagnostic.
+get_circuit returns derived consumer_ids, route_ids, panel_id and existing member_ids.
+find_unpowered_consumers includes name, source_type (null if missing), point_id,
+derived circuit_id and reason/status. get_electrical_ruleset(ruleset="generic") is
+read-only under electrical.rules.v1; other rulesets return unsupported_operation.
+Version remains 0.14.0 for this pre-merge hardening; no release tag is created.

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- M6.1.1 Panel membership now respects locks and revisions, Panel collisions use shared 3D volumes, and Consumer source cascade is scoped to affected Kitchen UUIDs. Circuit graph inspection and unpowered Consumer details are complete; `get_electrical_ruleset` describes generic checks.
+
 ### Added
 
 - M6.1 DistributionPanels, logical appliance Consumers, concept CableRoutes, Circuit load summaries and generic consistency rules; five additive Electrical capabilities. DomainHooks repairs source/panel lifecycle in the same Undo operation, without Kitchen coupling.

@@ -8,6 +8,7 @@ async def verify_system(call, mutate, undo, get, target, expect_error):
     panel_id=first(await mutate('create_distribution_panel',{'name':'M6.1 Panel','placement':placement,
         'dimensions_mm':{'width_mm':240,'height_mm':360,'depth_mm':100}}))
     a=first(await mutate('create_circuit',{'name':'M6.1 A','voltage_v':230,'panel_id':panel_id,'require_panel':True}))
+    assert (await get(panel_id))['metadata']['revision']==2
     b=first(await mutate('create_circuit',{'name':'M6.1 B','voltage_v':230}))
     outlet=first(await mutate('create_outlet',{'name':'M6.1 Outlet',
         'placement':{**placement,'offset_mm':1300,'height_mm':300},
@@ -22,6 +23,11 @@ async def verify_system(call, mutate, undo, get, target, expect_error):
         'connection':'outlet','rated_power_w':2200,'voltage_v':230}))
     missing=await call('find_unpowered_consumers')
     assert any(r['consumer_id']==consumer and r['status']=='missing_point' for r in missing['consumers'])
+    entry=next(r for r in missing['consumers'] if r['consumer_id']==consumer)
+    assert entry['name']=='M6.1 Dishwasher' and entry['source_type']=='kitchen.appliance'
+    assert entry['point_id'] is None and entry['circuit_id'] is None and entry['reason']=='missing_point'
+    rules=await call('get_electrical_ruleset')
+    assert rules['ruleset']=='generic' and 'collision' in rules['checks']
     await mutate('connect_consumer',{'target':target(consumer),'point_id':outlet})
     load=await call('get_circuit_load',{'target':target(a)})
     assert load['consumer_ids']==[consumer] and load['rated_power_w']==2200
@@ -36,6 +42,19 @@ async def verify_system(call, mutate, undo, get, target, expect_error):
     await undo()
     path=[[5400,75,1400],[5400,75,2500],[6300,75,2500],[6300,75,300]]
     route=first(await mutate('create_cable_route',{'name':'M6.1 Concept Route','circuit_id':a,'path_mm':path}))
+    graph=await call('get_circuit',{'target':target(a)})
+    assert graph['consumer_ids']==[consumer] and graph['route_ids']==[route] and graph['panel_id']==panel_id
+    panel_revision=(await get(panel_id))['metadata']['revision']
+    await mutate('assign_circuit_to_panel',{'target':target(b),'panel_id':panel_id})
+    assert (await get(panel_id))['metadata']['revision']==panel_revision+1
+    await undo()
+    assert (await get(panel_id))['metadata']['revision']==panel_revision
+    # Native collision regression; a coincident Panel must be visible to validation.
+    overlapping=first(await mutate('create_distribution_panel',{'name':'M6.1 Collision Panel','placement':placement,
+        'dimensions_mm':{'width_mm':240,'height_mm':360,'depth_mm':100}}))
+    findings=(await call('validate_electrical',{'target':target(panel_id)}))['findings']
+    assert any(r['category']=='collision' and r.get('panel_id')==panel_id and r.get('obstacle_id')==overlapping for r in findings)
+    await undo()
     assert (await call('get_cable_route',{'target':target(route)}))['length_mm']==4200
     route_box=(await get(route))['bbox_mm']
     assert all(abs(x-y)<0.5 for x,y in zip(route_box['min'],[5400,75,300]))
@@ -79,6 +98,7 @@ async def verify_system(call, mutate, undo, get, target, expect_error):
     await undo()
     assert (await call('get_consumer',{'target':target(consumer)}))['parameters']==connected['parameters']
     await mutate('delete_circuit',{'target':target(a),'detach_points':True,'detach_routes':True})
+    assert (await get(panel_id))['metadata']['revision']==panel_revision+1
     assert (await call('get_cable_route',{'target':target(route)}))['parameters']['circuit_id'] is None
     assert any(r['category']=='invalid_route_circuit' for r in (await call('validate_electrical',{'ruleset':'generic'}))['findings'])
     await undo()
@@ -92,4 +112,4 @@ async def verify_system(call, mutate, undo, get, target, expect_error):
     for _ in range(10):
         await undo()
     await expect_error('get_consumer',{'target':target(consumer)},'target_not_found')
-    print('M6.1 graph/source lifecycle and Undo flow passed')
+    print('M6.1.1 graph, Panel revisions/collisions, source lifecycle and Undo flow passed')

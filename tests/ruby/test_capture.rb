@@ -66,9 +66,12 @@ module Sketchup
   end
 end
 View = Struct.new(:camera, :vpwidth, :vpheight, :fail_capture, :captured_target,
-                  :camera_assignments, keyword_init: true) do
+                  :camera_assignments, :rendered_target, keyword_init: true) do
   def zoom_extents = raise('view.zoom_extents must not be called during capture')
-  def refresh = self
+  def refresh
+    self.rendered_target = [camera.target.x,camera.target.y,camera.target.z]
+    self
+  end
   def camera=(value)
     replacement = value.is_a?(Array) ? value[0] : value
     current = self[:camera]
@@ -82,6 +85,7 @@ View = Struct.new(:camera, :vpwidth, :vpheight, :fail_capture, :captured_target,
   end
   def write_image(filename:, **)
     raise 'export failed' if fail_capture
+    raise 'capture attempted before immediate view redraw' unless rendered_target == [camera.target.x,camera.target.y,camera.target.z]
 
     self.captured_target = camera.target
     File.binwrite(filename, "\x89PNG\r\n\x1A\n".b)
@@ -113,6 +117,34 @@ class CaptureTest < Minitest::Test
     assert_equal 300, result['height']
     assert result['camera_restored']
     assert_equal result['camera_before'], result['camera_after']
+  end
+
+  def test_framing_uses_detached_camera_and_target_sized_ortho_distance
+    @view.camera.perspective = false
+    @view.camera.height = 42
+    prior = HomeCAD::Capture.camera_state(@view.camera)
+    state_before_assignment = nil
+    @view.define_singleton_method(:camera=) do |value|
+      state_before_assignment = HomeCAD::Capture.camera_state(camera)
+      super(value)
+    end
+    HomeCAD::Capture.focus_bounds(@view, { 'min' => [0,0,0], 'max' => [100,100,100] })
+    assert_equal prior, state_before_assignment, 'framing must not mutate the live camera before assignment'
+    distance = @view.camera.eye.distance(@view.camera.target) * 25.4
+    assert_in_delta 2 * Math.sqrt(30000), distance, 0.0001
+  end
+
+  def test_monochrome_detection_ignores_row_padding_and_detects_geometry_pixels
+    image = Struct.new(:bits_per_pixel,:width,:height,:row_padding,:data).new(24,2,2,2,('abcabc' + "\0\0") * 2)
+    image.define_singleton_method(:load_file) { |_| true }
+    factory = Class.new
+    factory.define_singleton_method(:new) { image }
+    Sketchup.const_set(:ImageRep,factory)
+    assert HomeCAD::Capture.monochrome_png?('unused.png')
+    image.data = ('abcxyz' + "\0\0") * 2
+    refute HomeCAD::Capture.monochrome_png?('unused.png')
+  ensure
+    Sketchup.send(:remove_const,:ImageRep) if Sketchup.const_defined?(:ImageRep,false)
   end
 
   def test_exception_restores_camera

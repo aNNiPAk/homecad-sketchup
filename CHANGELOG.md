@@ -48,6 +48,8 @@
 
 ### Changed
 
+- View target framing prepares a detached Camera, uses target-sized ortho distance and redraws before native antialias=false PNG export. camera_capture records the temporary frame, and ImageRep-backed image_has_variation diagnoses flat backgrounds observed during M6.1 smoke.
+
 - Matched Python/Ruby version is 0.14.0 for M6.1; M6.0 request compatibility and protocol 1 are preserved.
 
 - Matched Python/Ruby version is 0.13.0 for M6; protocol stays 1. Cable routes, panels, consumers and engineering sizing are deferred to M6.1.

@@ -39,10 +39,13 @@ module HomeCAD
         set_camera(view, name) unless name == 'current'
         focus_target(view, target) if target
         frame_model(view, model) if zoom
-        png = write_png(view, width, height)
+        # write_image must see the current camera/geometry, including after Undo.
+        view.refresh
+        png, variation = write_png(view, width, height)
         response = { 'mime_type' => 'image/png', 'image_base64' => Base64.strict_encode64(png),
                      'view' => name, 'width' => width, 'height' => height,
-                     'target' => target && Targeting.identity(target), 'camera_before' => before }
+                     'target' => target && Targeting.identity(target), 'camera_before' => before,
+                     'camera_capture' => camera_state(view.camera), 'image_has_variation' => variation }
       ensure
         if original
           view.camera = [original, 0.0]
@@ -140,7 +143,8 @@ module HomeCAD
       center = (0..2).map { |index| Units.mm_to_internal((box['min'][index] + box['max'][index]) / 2.0) }
       extents = (0..2).map { |index| Units.mm_to_internal(box['max'][index] - box['min'][index]) }
       diameter = Math.sqrt(extents.sum { |value| value * value })
-      camera = view.camera
+      # Native Camera wrappers are live; prepare the whole frame off-view.
+      camera = snapshot_camera(view.camera)
       vector = [camera.eye.x - camera.target.x, camera.eye.y - camera.target.y,
                 camera.eye.z - camera.target.z]
       length = Math.sqrt(vector.sum { |value| value * value })
@@ -153,7 +157,7 @@ module HomeCAD
         distance = [diameter * 0.75 / Math.tan(half_angle), 1.0].max
       else
         camera.height = [diameter * 1.5, 1.0].max
-        distance = [length, diameter * 2.0, 1.0].max
+        distance = [diameter * 2.0, 1.0].max
       end
       eye = (0..2).map { |index| center[index] + vector[index] / length * distance }
       camera.set(Geom::Point3d.new(*eye), Geom::Point3d.new(*center), camera.up)
@@ -163,15 +167,27 @@ module HomeCAD
     def self.write_png(view, width, height)
       Dir.mktmpdir('homecad-capture-') do |directory|
         path = File.join(directory, 'capture.png')
-        result = view.write_image(filename: path, width: width, height: height, antialias: true)
+        result = view.write_image(filename: path, width: width, height: height, antialias: false)
         raise Runtime::BridgeError.new(-32006, 'capture_error', 'SketchUp could not capture the viewport') unless result && File.file?(path)
 
         bytes = File.binread(path)
         if bytes.bytesize > MAX_PNG_BYTES
           raise Runtime::BridgeError.new(-32004, 'constraint_violation', 'captured PNG exceeds 10 MiB; reduce max_size')
         end
-        bytes
+        [bytes, defined?(Sketchup::ImageRep) ? !monochrome_png?(path) : nil]
       end
+    end
+
+    def self.monochrome_png?(path)
+      image = Sketchup::ImageRep.new
+      image.load_file(path)
+      channels = image.bits_per_pixel / 8
+      return false unless [1,3,4].include?(channels) && image.width > 0 && image.height > 0
+      data = image.data
+      row_bytes = image.width * channels
+      pitch = row_bytes + image.row_padding
+      solid_row = data.byteslice(0,channels) * image.width
+      image.height.times.all? { |row| data.byteslice(row*pitch,row_bytes) == solid_row }
     end
   end
 end

@@ -50,3 +50,17 @@ Fast verification on SketchUp 26.2.243 passed the existing M6 flow plus M6.1 gra
 Wall movement, source regeneration/retyping and native Undo cleanup. The saved back
 view was visually inspected: Panel, outlet, continuous concept route and appliance
 were visible from positive_v; no cable diameter or engineering accuracy is implied.
+
+Visual review also caught a background-only export after Undo despite correct target
+bounds/camera restoration metadata. Target framing now prepares a detached Camera,
+uses a target-sized orthographic eye distance (not inherited from the prior view),
+and refreshes before write_image. camera_capture reports the actual temporary frame;
+the original restoration contract remains. A unit regression prevents live-wrapper
+mutation during framing; fresh SketchUp verification confirms visible geometry.
+
+The GPU export issue was intermittent: refresh/framing alone did not eliminate
+background-only images. Native export now uses the documented antialias=false path.
+ImageRep inspects raw rows (including padding) and reports image_has_variation; the
+system fixture requires it to be true and the resulting PNG is visually reviewed.
+The flag distinguishes a flat buffer, not arbitrary geometry correctness; an empty
+model/hidden target may legitimately be uniform. No image pixels are altered.

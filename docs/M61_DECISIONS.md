@@ -64,3 +64,10 @@ ImageRep inspects raw rows (including padding) and reports image_has_variation; 
 system fixture requires it to be true and the resulting PNG is visually reviewed.
 The flag distinguishes a flat buffer, not arbitrary geometry correctness; an empty
 model/hidden target may legitimately be uniform. No image pixels are altered.
+
+Final packaged M6.1 verification passed on SketchUp 26.2.243 with 77 Python tests,
+all Ruby suites, RBZ build and 23 successful test commands. The complete system flow,
+including detach/voltage mismatch/route update/Wall relocation/source lifecycle and
+native Undo cleanup, passed. The packaged PNG contained visible Panel, outlet,
+polyline and appliance and was inspected; camera restoration and pixel variation
+checks passed. Development links were restored with no cleanup errors.

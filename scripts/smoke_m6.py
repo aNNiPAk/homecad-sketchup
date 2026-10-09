@@ -4,10 +4,13 @@ import asyncio
 import json
 import os
 import sys
+import base64
+from pathlib import Path
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from homecad_mcp import VERSION
 from smoke_guard import validate_disposable_fixture
+from smoke_m61 import verify_system
 
 async def run():
     params = StdioServerParameters(command=sys.executable, args=['-m', 'homecad_mcp'], env=os.environ.copy())
@@ -22,6 +25,18 @@ async def run():
                 body = next((item.text for item in response.content if item.type == 'text'), '{}')
                 if response.isError:
                     raise RuntimeError(f'{name}: {body}')
+                if name == 'capture_view':
+                    image = next((item for item in response.content if item.type == 'image'), None)
+                    if image is None:
+                        raise RuntimeError('capture_view did not return an image')
+                    path = Path(__file__).resolve().parents[1] / '.homecad-dev' / 'screenshots' / f'm6-{(args or {}).get("view","current")}.png'
+                    path.parent.mkdir(parents=True,exist_ok=True)
+                    path.write_bytes(base64.b64decode(image.data,validate=True))
+                    print(f'saved screenshot: {path}')
+                    metadata=json.loads(body)
+                    if (args or {}).get('target'):
+                        metadata['target_bbox_mm']=(await call('get_object',{'target':args['target']}))['bbox_mm']
+                    path.with_suffix('.json').write_text(json.dumps(metadata,indent=2),encoding='utf-8')
                 return json.loads(body)
 
             async def mutate(name, args):
@@ -138,6 +153,15 @@ async def run():
                     assert (await call('find_objects', {'homecad_id': identifier}))['resolution'] == 'none'
                 for identifier in circuit_ids:
                     await expect_error('get_circuit', {'target': target(identifier)}, 'target_not_found')
+                if VERSION != '0.13.0':
+                    if not {'electrical.panels.v1','electrical.consumers.v1','electrical.routes.v1',
+                            'electrical.load.v1','electrical.rules.v1'} <= set(status['capabilities']):
+                        raise RuntimeError('matching M6.1 system capabilities are required')
+                    await verify_system(call,mutate,undo,get,target,expect_error)
+                for identifier in object_ids:
+                    assert (await call('find_objects',{'homecad_id':identifier}))['resolution']=='none'
+                for identifier in circuit_ids:
+                    await expect_error('get_circuit',{'target':target(identifier)},'target_not_found')
                 assert (await call('get_model_info'))['root_entity_count'] == before['root_entity_count']
                 print('M6 real SketchUp smoke passed; points, circuits and Undo cleanup verified')
             finally:

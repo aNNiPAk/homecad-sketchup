@@ -47,7 +47,7 @@ FOCUSED_RUBY_TESTS = {
     "m55": "tests/ruby/test_corner_kitchen.rb",
     "m56": "tests/ruby/test_kitchen_variants.rb",
     "m57": "tests/ruby/test_hardware.rb",
-    "m6": "tests/ruby/test_electrical.rb",
+    "m6": "tests/ruby/test_electrical_system.rb",
 }
 
 
@@ -83,6 +83,7 @@ def _run_full_tests(root: Path, env: dict[str, str]) -> list[dict]:
         (["ruby", "tests/ruby/test_kitchen_variants.rb"], "Ruby kitchen variants tests"),
         (["ruby", "tests/ruby/test_hardware.rb"], "Ruby hardware tests"),
         (["ruby", "tests/ruby/test_electrical.rb"], "Ruby Electrical tests"),
+        (["ruby", "tests/ruby/test_electrical_system.rb"], "Ruby Electrical system tests"),
         (["uv", "run", "--project", "mcp", "python", "scripts/build_rbz.py"], "RBZ build"),
     ]:
         row = _run(command, root=root, env=env, label=label)

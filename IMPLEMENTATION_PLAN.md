@@ -793,6 +793,11 @@ M6 (0.13.0): ElectricalPoint/Outlet/Switch/JunctionBox и Circuit. Поддер�
 CableRoute, DistributionPanel, Consumer, appliance requirements и инженерные расчёты
 перенесены в M6.1; приведённый ниже список описывает весь Electrical roadmap.
 
+M6.1 (0.14.0) завершает concept Electrical System: DistributionPanel, Consumer с
+прямой ссылкой на kitchen.appliance UUID, CableRoute, derived circuit load и generic
+consistency rules. Consumer -> Point -> Circuit и Circuit -> Panel имеют по одному
+источнику связей; lifecycle обслуживает DomainHooks. Контракт: tests/contracts/m61.md.
+
 Создать объекты:
 
 ```text

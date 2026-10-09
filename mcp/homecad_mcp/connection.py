@@ -14,6 +14,18 @@ from .errors import BridgeError
 logger = logging.getLogger(__name__)
 
 METHOD_CAPABILITIES = {
+    "create_outlet": "electrical.points.v1",
+    "create_switch": "electrical.points.v1",
+    "create_electrical_point": "electrical.points.v1",
+    "update_electrical_point": "electrical.points.v1",
+    "delete_electrical_point": "electrical.points.v1",
+    "validate_electrical": "electrical.points.v1",
+    "create_circuit": "electrical.circuits.v1",
+    "get_circuit": "electrical.circuits.v1",
+    "list_circuits": "electrical.circuits.v1",
+    "update_circuit": "electrical.circuits.v1",
+    "delete_circuit": "electrical.circuits.v1",
+    "assign_to_circuit": "electrical.circuits.v1",
     "get_model_info": "model.info.v1",
     "list_objects": "scene.inspect.v1",
     "find_objects": "scene.inspect.v1",
@@ -186,6 +198,8 @@ class BridgeClient:
                 "Install a HomeCAD RBZ that supports this operation and restart SketchUp.",
                 -32601,
             )
+        if method == "assign_to_circuit" and "electrical.points.v1" not in capabilities:
+            raise BridgeError("unsupported_operation", "assign_to_circuit requires 'electrical.points.v1'", -32601)
         if BridgeClient._uses_service_zones(method, params or {}) and "kitchen.service_zone.v1" not in capabilities:
             raise BridgeError(
                 "unsupported_operation",

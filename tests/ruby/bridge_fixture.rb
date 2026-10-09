@@ -328,7 +328,7 @@ module Sketchup
 end
 
 module HomeCAD
-  VERSION = '0.12.0'
+  VERSION = '0.13.0'
   PROTOCOL_VERSION = 1
 end
 

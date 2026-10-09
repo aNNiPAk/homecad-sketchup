@@ -19,6 +19,7 @@ def test_rbz_contains_loader_and_matching_support_folder():
             "furniture_presets", "hardware_catalog", "drawer_hardware",
             "service_zones", "kitchen", "cutlist",
             "multi_wall_attachment", "corner_kitchen", "kitchen_variants",
+            "domain_hooks", "scene_volumes", "electrical_data", "circuits", "electrical",
         }
         assert {f"homecad/core/{name}.rb" for name in required_core_files} <= names
         assert "homecad/catalog/hardware.json" in names

@@ -439,7 +439,7 @@ async def test_mcp_stdio_starts_and_lists_supported_tools():
             await session.initialize()
             tools = await session.list_tools()
             assert {tool.name for tool in tools.tools} == {
-                "homecad_status", "get_model_info", "list_objects", "find_objects",
+                "create_outlet", "create_switch", "create_electrical_point", "update_electrical_point", "delete_electrical_point", "validate_electrical", "create_circuit", "get_circuit", "list_circuits", "update_circuit", "delete_circuit", "assign_to_circuit", "homecad_status", "get_model_info", "list_objects", "find_objects",
                 "get_object", "get_selection", "measure", "capture_view", "undo",
                 "create_group", "create_face", "create_edge", "create_box", "create_circle",
                 "create_arc", "create_polygon", "push_pull", "follow_me", "transform_object",

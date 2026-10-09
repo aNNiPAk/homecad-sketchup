@@ -4,6 +4,27 @@ module HomeCAD
     KEYS = %w[name placement dimensions_mm quantity sku description].freeze
     TOLERANCE_MM = 0.01
 
+    def self.dispatch(model, method, params)
+      case method
+      when 'create_outlet' then create(model, params, 'outlet')
+      when 'create_switch' then create(model, params, 'switch')
+      when 'create_electrical_point' then create(model, params)
+      when 'update_electrical_point' then update(model, params)
+      when 'delete_electrical_point' then delete(model, params)
+      when 'validate_electrical' then validate_scene(model, params)
+      when 'assign_to_circuit' then assign(model, params)
+      when 'create_circuit' then Circuits.create(model, params)
+      when 'get_circuit' then Circuits.get(model, params)
+      when 'list_circuits' then Circuits.list(model, params)
+      when 'update_circuit' then Circuits.update(model, params)
+      when 'delete_circuit' then Circuits.delete(model, params)
+      else raise Runtime::BridgeError.new(-32601, 'unsupported_operation', 'unknown electrical method')
+      end
+    rescue Runtime::BridgeError then raise
+    rescue StandardError => error
+      raise Runtime::BridgeError.new(-32009, 'geometry_error', "#{method} failed: #{error.message}")
+    end
+
     def self.points(model)
       model.entities.to_a.select { |entity| KINDS.map { |kind| "electrical.#{kind}" }.include?(Metadata.read(entity)['type']) }
     end
@@ -206,8 +227,8 @@ module HomeCAD
     end
 
     def self.after_mutation(model, result)
-      return result unless result.is_a?(Hash) && result['operation'].to_s.include?('architecture') ||
-        result.is_a?(Hash) && %w[create_opening create_door create_window create_niche].include?(result['operation'])
+      return result unless result.is_a?(Hash) && (result['operation'].to_s.include?('architecture') ||
+        %w[create_opening create_door create_window create_niche].include?(result['operation']))
       deleted = result.fetch('deleted', []).select { |item| item['homecad_type'].to_s.start_with?('electrical.') }
       circuit_ids = deleted.map { |item| item.dig('parameters', 'circuit_id') }
       result['updated'] = result.fetch('updated', []) + Circuits.bump(model, circuit_ids)

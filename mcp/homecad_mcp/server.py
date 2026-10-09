@@ -6,7 +6,8 @@ import json
 import logging
 import os
 
-from typing import Any
+from typing import Any, Literal
+from typing_extensions import TypedDict, NotRequired
 
 from mcp.server.fastmcp import FastMCP, Image
 from mcp.types import ToolAnnotations
@@ -24,6 +25,101 @@ CREATE_TOOL = ToolAnnotations(readOnlyHint=False, destructiveHint=False,
                                idempotentHint=False, openWorldHint=False)
 MUTATE_TOOL = ToolAnnotations(readOnlyHint=False, destructiveHint=True,
                                idempotentHint=False, openWorldHint=False)
+
+class ElectricalDimensions(TypedDict):
+    width_mm: float
+    height_mm: float
+    depth_mm: float
+
+class ElectricalWallPlacement(TypedDict):
+    mode: Literal["wall"]
+    wall_id: str
+    offset_mm: float
+    height_mm: float
+    side: Literal["positive_v", "negative_v"]
+    clearance_mm: NotRequired[float]
+
+class ElectricalWorldPlacement(TypedDict):
+    mode: Literal["world"]
+    origin_mm: list[float]
+    normal: list[float]
+    up: list[float]
+
+ElectricalPlacement = ElectricalWallPlacement | ElectricalWorldPlacement
+
+def _electrical_params(placement, dimensions_mm, name, quantity, sku, description):
+    return {"placement": placement, "dimensions_mm": dimensions_mm, "name": name,
+            "quantity": quantity, "sku": sku, "description": description}
+
+@mcp.tool(annotations=CREATE_TOOL)
+async def create_outlet(placement: ElectricalPlacement, dimensions_mm: ElectricalDimensions,
+                        name: str = "Outlet", quantity: int = 1,
+                        sku: str | None = None, description: str | None = None) -> dict:
+    """Create an explicitly sized concept outlet. Wall coordinates anchor its center."""
+    return await _scene_call("create_outlet", _electrical_params(placement, dimensions_mm, name, quantity, sku, description))
+
+@mcp.tool(annotations=CREATE_TOOL)
+async def create_switch(placement: ElectricalPlacement, dimensions_mm: ElectricalDimensions,
+                        name: str = "Switch", quantity: int = 1,
+                        sku: str | None = None, description: str | None = None) -> dict:
+    """Create an explicitly sized concept switch; quantity describes positions in the block."""
+    return await _scene_call("create_switch", _electrical_params(placement, dimensions_mm, name, quantity, sku, description))
+
+@mcp.tool(annotations=CREATE_TOOL)
+async def create_electrical_point(kind: Literal["outlet", "switch", "junction_box", "connection_point"],
+                                 placement: ElectricalPlacement, dimensions_mm: ElectricalDimensions,
+                                 name: str = "Electrical point", quantity: int = 1,
+                                 sku: str | None = None, description: str | None = None) -> dict:
+    """Create a generated electrical point in millimeters, without engineering assumptions."""
+    params = _electrical_params(placement, dimensions_mm, name, quantity, sku, description)
+    return await _scene_call("create_electrical_point", {"kind": kind, **params})
+
+@mcp.tool(annotations=MUTATE_TOOL)
+async def update_electrical_point(target: dict, changes: dict) -> dict:
+    """Validate and update semantic electrical point parameters in one Undo operation."""
+    return await _scene_call("update_electrical_point", {"target": target, "changes": changes})
+
+@mcp.tool(annotations=MUTATE_TOOL)
+async def delete_electrical_point(target: dict) -> dict:
+    """Delete an electrical point and update its circuit membership atomically."""
+    return await _scene_call("delete_electrical_point", {"target": target})
+
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def validate_electrical(target: dict | None = None, limit: int = 50, offset: int = 0) -> dict:
+    """Read bounded placement/support findings for HomeCAD volumes; no code compliance claim."""
+    return await _scene_call("validate_electrical", {"target": target, "limit": limit, "offset": offset})
+
+@mcp.tool(annotations=CREATE_TOOL)
+async def create_circuit(name: str, voltage_v: float | None = None, cable_label: str | None = None,
+                         protection_label: str | None = None, description: str | None = None) -> dict:
+    """Create a logical project circuit with caller-selected labels, without geometry."""
+    return await _scene_call("create_circuit", {"name": name, "voltage_v": voltage_v,
+        "cable_label": cable_label, "protection_label": protection_label, "description": description})
+
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def get_circuit(target: dict) -> dict:
+    """Read a circuit by exact HomeCAD UUID and derive its member point IDs."""
+    return await _scene_call("get_circuit", {"target": target})
+
+@mcp.tool(annotations=READ_ONLY_TOOL)
+async def list_circuits(limit: int = 50, offset: int = 0) -> dict:
+    """Read a bounded page of logical project circuits."""
+    return await _scene_call("list_circuits", {"limit": limit, "offset": offset})
+
+@mcp.tool(annotations=MUTATE_TOOL)
+async def update_circuit(target: dict, changes: dict) -> dict:
+    """Update explicit project circuit labels and voltage; no protection sizing."""
+    return await _scene_call("update_circuit", {"target": target, "changes": changes})
+
+@mcp.tool(annotations=MUTATE_TOOL)
+async def delete_circuit(target: dict, detach_points: bool = False) -> dict:
+    """Delete an empty circuit, or explicitly detach all member points in the same Undo."""
+    return await _scene_call("delete_circuit", {"target": target, "detach_points": detach_points})
+
+@mcp.tool(annotations=MUTATE_TOOL)
+async def assign_to_circuit(target: dict, circuit_id: str | None) -> dict:
+    """Assign, transfer, or detach (null) a point's single circuit membership."""
+    return await _scene_call("assign_to_circuit", {"target": target, "circuit_id": circuit_id})
 
 
 @mcp.tool(annotations=READ_ONLY_TOOL)

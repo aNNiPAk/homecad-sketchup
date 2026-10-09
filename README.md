@@ -78,6 +78,15 @@ uv run --project mcp python scripts/smoke_m3.py --confirm-disposable
 
 It exercises wall frame and cuts, hosted window/door regeneration after a wall rotation, rejected invalid shortening, a partial niche, conservative Room detection/creation, screenshots, and native Undo cleanup. See [the M3 contract](tests/contracts/m3.md) and [M3 decisions](docs/M3_DECISIONS.md). A SketchUp kernel run is still needed to accept manifoldness, niche depth, generated concept geometry, and Undo behavior in SketchUp 26.2.
 
+## Electrical Points and Circuits (M6)
+
+M6 Electrical (0.13.0) adds explicitly sized outlet/switch/junction/connection point
+Groups in Wall or world frames, logical project circuits, atomic assignment and
+bounded read-only placement validation. Points follow Wall transforms; cuts may
+produce support warnings. Dimensions, slide-independent electrical labels and voltage
+are project inputs, without automatic engineering sizing. See [M6 contract](tests/contracts/m6.md).
+Cable routes, distribution panels and consumers are reserved for M6.1.
+
 ## Furniture Core (M4)
 
 M4 adds `furniture.core.v1` and a parametric `furniture.cabinet`. Use `create_cabinet`, `get_furniture_frame`, and `list_furniture_parts` to create and inspect a cabinet; `update_furniture_object` changes semantic parameters and regenerates its generated panels. `delete_furniture_object` returns a pre-delete tombstone. Cabinet root identity is preserved by updates, and primitive mutation tools cannot edit the Cabinet or nested generated parts.

@@ -18,6 +18,8 @@ module HomeCAD
         kitchen.service_zone.v1
         kitchen.corner_run.v1
         kitchen.variants.v1
+        electrical.points.v1
+        electrical.circuits.v1
       ].freeze
 
       def self.dispatch(request, handshake_done:)
@@ -53,6 +55,11 @@ module HomeCAD
              'plan_cabinet_drawer', 'create_cabinet',
              'update_furniture_object', 'delete_furniture_object'
           Furniture.dispatch(active_model!, method, params)
+        when 'create_outlet', 'create_switch', 'create_electrical_point',
+             'update_electrical_point', 'delete_electrical_point', 'validate_electrical',
+             'assign_to_circuit', 'create_circuit', 'get_circuit', 'list_circuits',
+             'update_circuit', 'delete_circuit'
+          Electrical.dispatch(active_model!, method, params)
         when 'get_project_settings' then empty!(params); ProjectSettings.read(active_model!)
         when 'update_project_settings' then
           Primitives.check_keys!(params, %w[changes])

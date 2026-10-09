@@ -15,7 +15,7 @@ from homecad_mcp.server import (boolean_operation, capture_view, create_box, fin
 async def test_mcp_tools_expose_mutation_schemas_and_annotations():
     tools = {tool.name: tool for tool in await mcp.list_tools()}
     names = set(tools)
-    assert names == {"homecad_status", "get_model_info", "list_objects", "find_objects",
+    assert names == {"create_outlet", "create_switch", "create_electrical_point", "update_electrical_point", "delete_electrical_point", "validate_electrical", "create_circuit", "get_circuit", "list_circuits", "update_circuit", "delete_circuit", "assign_to_circuit", "homecad_status", "get_model_info", "list_objects", "find_objects",
                      "get_object", "get_selection", "measure", "capture_view", "undo",
                      "create_group", "create_face", "create_edge", "create_box",
                      "create_circle", "create_arc", "create_polygon", "push_pull",

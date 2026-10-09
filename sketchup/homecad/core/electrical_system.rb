@@ -15,6 +15,7 @@ module HomeCAD
       when 'connect_consumer' then ElectricalConsumers.connect(model,params)
       when 'find_unpowered_consumers' then ElectricalConsumers.unpowered(model,params)
       when 'get_circuit_load' then ElectricalConsumers.load(model,params)
+      when 'get_electrical_ruleset' then ElectricalRules.describe(params)
       when 'create_cable_route' then ElectricalRoutes.create(model,params)
       when 'get_cable_route' then ElectricalRoutes.get(model,params)
       when 'list_cable_routes' then ElectricalRoutes.list(model,params)
@@ -35,8 +36,17 @@ module HomeCAD
       changed_circuits = ElectricalPanels.detach(model,panels,already_bumped: already) if panels.any?
       changed_circuits ||= []
       already |= changed_circuits.map { |r| r['homecad_id'] }
+      affected = (deleted + result.fetch('updated', [])).filter_map do |item|
+        item['homecad_id'] if item['homecad_type'].to_s.start_with?('kitchen.') && item['homecad_type'] != 'kitchen.run'
+      end
+      deleted.select { |item| item['homecad_type'] == 'kitchen.run' }.each do |item|
+        raw = item.dig('metadata', KitchenData::KEY)
+        params = raw ? JSON.parse(raw) : item.fetch('parameters', {})
+        affected.concat(params.fetch('semantic_objects', {}).values.map { |child| child['homecad_id'] })
+      end
       all = ElectricalConsumers.records(model)
       orphaned = all.select do |r|
+        next false unless affected.include?(r['parameters']['source_object_id'])
         begin
           ElectricalConsumers.source(model,r['parameters']['source_object_id']); false
         rescue Runtime::BridgeError => error

@@ -70,7 +70,7 @@ module HomeCAD
              'get_consumer', 'list_consumers', 'update_consumer', 'delete_consumer',
              'connect_consumer', 'find_unpowered_consumers', 'get_circuit_load',
              'create_cable_route', 'get_cable_route', 'list_cable_routes',
-             'update_cable_route', 'delete_cable_route'
+             'update_cable_route', 'delete_cable_route', 'get_electrical_ruleset'
           ElectricalSystem.dispatch(active_model!, method, params)
         when 'get_project_settings' then empty!(params); ProjectSettings.read(active_model!)
         when 'update_project_settings' then

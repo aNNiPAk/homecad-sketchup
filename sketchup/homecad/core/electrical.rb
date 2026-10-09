@@ -141,7 +141,7 @@ module HomeCAD
     end
 
     def self.findings(model, selected = points(model))
-      obstacles = SceneVolumes.obstacles(model)
+      obstacles = SceneVolumes.obstacles(model, include_electrical: true)
       all_points = points(model)
       records = ElectricalData.circuits(model)
       selected.flat_map do |entity|
@@ -154,6 +154,7 @@ module HomeCAD
         end
         own = obb(entity)
         obstacles.each do |item|
+          next if item['homecad_id'] == id
           hit = item['boxes'].any? { |box| SceneVolumes.overlap?(own, SceneVolumes.upright(box.is_a?(Array) ? box.last : box)) }
           result << { 'category' => 'collision', 'severity' => 'warning', 'point_id' => id,
             'obstacle_id' => item['homecad_id'], 'obstacle_type' => item['type'] } if hit
@@ -162,6 +163,9 @@ module HomeCAD
           next if other.equal?(entity)
           result << { 'category' => 'collision', 'severity' => 'warning', 'point_id' => id,
             'obstacle_id' => Metadata.read(other)['homecad_id'], 'obstacle_type' => Metadata.read(other)['type'] } if SceneVolumes.overlap?(own, obb(other))
+        end
+        if Metadata.read(entity)['type'] == 'electrical.panel'
+          result.each { |finding| finding['panel_id'] = finding.delete('point_id') }
         end
         result
       end

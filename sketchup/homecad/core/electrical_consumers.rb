@@ -140,7 +140,17 @@ module HomeCAD
       Primitives.check_keys!(request, %w[limit offset]); limit, offset = Circuits.page(request)
       entries = records(model).filter_map do |record|
         status = unpowered_status(model, record['parameters'])
-        { 'consumer_id' => record['homecad_id'], 'source_object_id' => record['parameters']['source_object_id'], 'status' => status } if status
+        next unless status
+        params = record['parameters']
+        source_type = begin
+          Metadata.read(Targeting.resolve_one(model, { 'homecad_id' => params['source_object_id'] }).entity)['type']
+        rescue Runtime::BridgeError => error
+          raise unless %w[target_not_found ambiguous_target constraint_violation].include?(error.category)
+          nil
+        end
+        { 'consumer_id' => record['homecad_id'], 'source_object_id' => params['source_object_id'],
+          'name' => params['name'], 'source_type' => source_type, 'point_id' => params['point_id'],
+          'circuit_id' => circuit_id(model, params), 'status' => status, 'reason' => status }
       end
       { 'consumers' => entries.slice(offset, limit) || [], 'total' => entries.length,
         'limit' => limit, 'offset' => offset, 'has_more' => offset + limit < entries.length }

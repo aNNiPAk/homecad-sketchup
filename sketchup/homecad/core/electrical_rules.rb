@@ -2,8 +2,18 @@ module HomeCAD
   # Named data-independent rulesets. No executable expressions or numeric national rules.
   module ElectricalRules
     RULESETS = { 'generic' => :generic }.freeze
+    def self.describe(request)
+      Primitives.check_keys!(request, %w[ruleset])
+      name = request.fetch('ruleset', 'generic')
+      raise Runtime::BridgeError.new(-32601, 'unsupported_operation', 'only generic Electrical ruleset is available') unless RULESETS.key?(name)
+      { 'ruleset' => name, 'version' => 1, 'available_rulesets' => RULESETS.keys,
+        'checks' => %w[consumer_unpowered voltage_mismatch orphan_reference missing_panel invalid_route_circuit missing_support collision],
+        'constraints' => { 'require_panel' => 'optional boolean' },
+        'limitations' => ['HomeCAD concept volumes only', 'No national regulations or automatic protective-device sizing'],
+        'severity' => 'warning' }
+    end
     def self.finding(category, **fields)
-      { 'category' => category, 'severity' => 'warning' }.merge(fields)
+      { 'category' => category, 'severity' => 'warning' }.merge(fields.transform_keys(&:to_s))
     end
 
     def self.generic(model, constraints = {})
@@ -62,7 +72,7 @@ module HomeCAD
       constraints = request.fetch('constraints',{})
       Primitives.invalid!('constraints must be an object') unless constraints.is_a?(Hash)
       limit, offset = Circuits.page(request)
-      target = request['target']; id = nil; selected = Electrical.points(model)
+      target = request['target']; id = nil; selected = Electrical.points(model) + ElectricalPanels.panels(model)
       if target
         if target.is_a?(Hash) && target.keys == ['homecad_id'] &&
            (ElectricalData.circuits(model)+ElectricalConsumers.records(model)).any? { |r| r['homecad_id'] == target['homecad_id'] }
@@ -72,16 +82,10 @@ module HomeCAD
           entry = Targeting.resolve_one(model,target)
           Architecture.constraint!('validate target must be an Electrical object') unless Metadata.read(entry.entity)['type'].to_s.start_with?('electrical.')
           id = Metadata.read(entry.entity)['homecad_id']
-          selected = Electrical.points(model).select { |point| point.equal?(entry.entity) }
+          selected = selected.select { |point| point.equal?(entry.entity) }
         end
       end
       entries = Electrical.findings(model,selected) + generic(model,constraints)
-      ElectricalPanels.panels(model).each do |panel|
-        pid = Metadata.read(panel)['homecad_id']
-        if (!id || id == pid) && !Electrical.supported?(model,ElectricalData.read(panel))
-          entries << finding('missing_support', panel_id: pid, obstacle_id: Metadata.read(panel)['wall_id'])
-        end
-      end
       entries.select! { |entry| %w[point_id consumer_id circuit_id route_id panel_id obstacle_id reference_id].any? { |key| entry[key] == id } } if id
       { 'findings' => entries.slice(offset,limit)||[], 'total'=>entries.length,
         'limit'=>limit,'offset'=>offset,'has_more'=>offset+limit < entries.length }

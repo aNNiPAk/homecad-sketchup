@@ -1,7 +1,7 @@
 module HomeCAD
   # Canonical HomeCAD volumes; arbitrary SketchUp topology is outside the contract.
   module SceneVolumes
-    def self.obstacles(model, exclude_id: nil)
+    def self.obstacles(model, exclude_id: nil, include_electrical: false)
       model.entities.to_a.filter_map do |entity|
         data = Metadata.read(entity); id = data['homecad_id']; type = data['type']
         next unless id && id != exclude_id
@@ -39,6 +39,9 @@ module HomeCAD
                         part['bottom_mm'], part['bottom_mm'] + part['height_mm']])]
                     end
                   end
+                when 'electrical.panel'
+                  next unless include_electrical
+                  [Electrical.obb(entity)]
                 else next
                 end
         { 'homecad_id' => id, 'type' => type, 'boxes' => boxes }
@@ -46,6 +49,7 @@ module HomeCAD
     end
 
     def self.upright(box)
+      return box if box.key?(:axes)
       u0, u1, v0, v1, z0, z1 = box[:limits]
       axes = [box[:x], box[:y], [0, 0, 1]]
       center = box[:origin].each_with_index.map do |origin, i|

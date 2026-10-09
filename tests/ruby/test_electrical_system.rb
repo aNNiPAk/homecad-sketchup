@@ -3,6 +3,95 @@ root = File.expand_path('../../sketchup/homecad/core',__dir__)
 %w[electrical_panels electrical_consumers electrical_routes electrical_rules electrical_system].each { |name| require File.join(root,name) }
 
 class ElectricalSystemTest < ElectricalTest
+  def test_panel_membership_revisions_transfer_noop_and_locks
+    a = HomeCAD::ElectricalPanels.create(@model, request)['created'].first['homecad_id']
+    b = HomeCAD::ElectricalPanels.create(@model, request.merge('placement'=>request['placement'].merge('offset_mm'=>500)))['created'].first['homecad_id']
+    c = HomeCAD::Circuits.create(@model, 'name'=>'Assigned', 'panel_id'=>a)['created'].first['homecad_id']
+    assert_equal 2, HomeCAD::Metadata.read(entity(a))['revision']
+    @model.events.clear
+    HomeCAD::ElectricalPanels.assign(@model, 'target'=>target(c), 'panel_id'=>b)
+    assert_equal [:start,:commit], @model.events.map(&:first)
+    assert_equal 3, HomeCAD::Metadata.read(entity(a))['revision']
+    assert_equal 2, HomeCAD::Metadata.read(entity(b))['revision']
+    entity(b).define_singleton_method(:locked?) { true }
+    @model.events.clear
+    HomeCAD::ElectricalPanels.assign(@model, 'target'=>target(c), 'panel_id'=>b)
+    assert_empty @model.events
+    snapshot = HomeCAD::Circuits.resolve(@model,target(c))
+    [-> { HomeCAD::ElectricalPanels.assign(@model,'target'=>target(c),'panel_id'=>nil) },
+     -> { HomeCAD::Circuits.delete(@model,'target'=>target(c)) },
+     -> { HomeCAD::Circuits.create(@model,'name'=>'Locked','panel_id'=>b) },
+     -> { HomeCAD::ElectricalPanels.assign(@model,'target'=>target(c),'panel_id'=>a) }].each do |action|
+      error = assert_raises(HomeCAD::Runtime::BridgeError, &action)
+      assert_equal 'constraint_violation', error.category
+      assert_empty @model.events
+      assert_equal snapshot, HomeCAD::Circuits.resolve(@model,target(c))
+    end
+    entity(b).define_singleton_method(:locked?) { false }
+    HomeCAD::ElectricalPanels.assign(@model,'target'=>target(c),'panel_id'=>nil)
+    assert_equal 3, HomeCAD::Metadata.read(entity(b))['revision']
+    HomeCAD::ElectricalPanels.assign(@model,'target'=>target(c),'panel_id'=>a)
+    HomeCAD::Circuits.delete(@model,'target'=>target(c))
+    assert_equal 5, HomeCAD::Metadata.read(entity(a))['revision']
+  end
+
+  def test_panel_collision_with_points_panels_and_column
+    panel = HomeCAD::ElectricalPanels.create(@model, request)['created'].first['homecad_id']
+    other = HomeCAD::ElectricalPanels.create(@model, request)['created'].first['homecad_id']
+    p = point
+    column = HomeCAD::Architecture.create_column(@model, 'origin_mm'=>[970,65,270],
+      'width_mm'=>60,'depth_mm'=>15,'height_mm'=>60)['created'].first['homecad_id']
+    cabinet = HomeCAD::Furniture.create_cabinet(@model,'width_mm'=>600,'depth_mm'=>560,'height_mm'=>720,
+      'placement'=>{'mode'=>'world','origin_mm'=>[800,60,0],'rotation_degrees'=>0})['created'].first['homecad_id']
+    findings = HomeCAD::ElectricalRules.validate(@model,'target'=>target(panel))['findings']
+    obstacles = findings.select { |r| r['category']=='collision' && r['panel_id']==panel }.map { |r| r['obstacle_id'] }
+    [other,p,column,cabinet].each { |id| assert_includes obstacles,id }
+    refute_includes obstacles,panel
+    point_findings=HomeCAD::ElectricalRules.validate(@model,'target'=>target(p))['findings']
+    assert point_findings.any? { |r| r['point_id']==p && r['obstacle_id']==panel }
+    refute HomeCAD::SceneVolumes.obstacles(@model).any? { |r| r['type']=='electrical.panel' }
+  end
+
+  def test_panel_kitchen_collision_and_world_contact_without_penetration
+    appliance
+    panel = HomeCAD::ElectricalPanels.create(@model,request.merge('placement'=>request['placement'].merge('offset_mm'=>2300)))['created'].first['homecad_id']
+    assert HomeCAD::ElectricalRules.validate(@model,'target'=>target(panel))['findings'].any? { |r| r['category']=='collision' && r['obstacle_id']==@run }
+    world={'mode'=>'world','origin_mm'=>[10000,0,0],'normal'=>[0,0,1],'up'=>[0,1,0]}
+    a=HomeCAD::ElectricalPanels.create(@model,request.merge('placement'=>world))['created'].first['homecad_id']
+    b=HomeCAD::ElectricalPanels.create(@model,request.merge('placement'=>world.merge('origin_mm'=>[10000,0,20])))['created'].first['homecad_id']
+    refute HomeCAD::ElectricalRules.validate(@model,'target'=>target(a))['findings'].any? { |r| r['category']=='collision' && r['obstacle_id']==b }
+  end
+
+  def test_unrelated_mutation_preserves_corrupted_consumer_for_diagnostics
+    id=consumer
+    records=HomeCAD::ElectricalConsumers.records(@model)
+    records.first['parameters']['source_object_id']=SecureRandom.uuid
+    HomeCAD::ElectricalConsumers.write(@model,records)
+    HomeCAD::Architecture.create_wall(@model,'start_mm'=>[0,5000,0],'end_mm'=>[4000,5000,0],
+      'thickness_mm'=>120,'height_mm'=>2700)
+    assert_equal records,HomeCAD::ElectricalConsumers.records(@model)
+    assert HomeCAD::ElectricalRules.validate(@model,{})['findings'].any? { |r| r['category']=='orphan_reference' && r['consumer_id']==id }
+  end
+
+  def test_graph_inspection_ruleset_and_unpowered_details
+    id=consumer; c=circuit; p=point
+    missing=HomeCAD::ElectricalConsumers.unpowered(@model,{})['consumers'].first
+    assert_equal 'Dishwasher',missing['name']
+    assert_equal 'kitchen.appliance',missing['source_type']
+    assert_nil missing['point_id']; assert_nil missing['circuit_id']
+    assert_equal missing['status'],missing['reason']
+    HomeCAD::Electrical.assign(@model,'target'=>target(p),'circuit_id'=>c)
+    HomeCAD::ElectricalConsumers.connect(@model,'target'=>target(id),'point_id'=>p)
+    route=HomeCAD::ElectricalRoutes.create(@model,'name'=>'Route','circuit_id'=>c,'path_mm'=>[[0,0,0],[100,0,0]])['created'].first['homecad_id']
+    graph=HomeCAD::Circuits.get(@model,'target'=>target(c))
+    assert_equal [p],graph['member_ids']; assert_equal [id],graph['consumer_ids']; assert_equal [route],graph['route_ids']
+    @model.events.clear
+    assert_includes HomeCAD::ElectricalRules.describe({})['checks'],'voltage_mismatch'
+    assert_empty @model.events
+    error=assert_raises(HomeCAD::Runtime::BridgeError) { HomeCAD::ElectricalRules.describe('ruleset'=>'RU') }
+    assert_equal 'unsupported_operation',error.category
+  end
+
   def appliance
     return @appliance if @appliance
     plan = HomeCAD::Kitchen.plan(@model, { 'wall'=>target(wall),'start_mm'=>2000,'end_mm'=>2600,
@@ -25,7 +114,7 @@ class ElectricalSystemTest < ElectricalTest
     assert_raises(HomeCAD::Runtime::BridgeError) { HomeCAD::ElectricalPanels.delete(@model,'target'=>target(panel)) }
     HomeCAD::Architecture.update_object(@model,'target'=>target(wall),
       'changes'=>{'start_mm'=>[0,0,0],'end_mm'=>[0,4000,0]})
-    assert_equal 2, HomeCAD::Metadata.read(entity(panel))['revision']
+    assert_equal 3, HomeCAD::Metadata.read(entity(panel))['revision']
     deleted = HomeCAD::ElectricalPanels.delete(@model,'target'=>target(panel),'detach_circuits'=>true)
     assert_equal 3, HomeCAD::Circuits.resolve(@model,target(c))['revision']
     assert_nil HomeCAD::Circuits.resolve(@model,target(c))['parameters']['panel_id']

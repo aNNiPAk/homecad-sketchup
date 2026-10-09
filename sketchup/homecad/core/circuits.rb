@@ -1,6 +1,6 @@
 module HomeCAD
   module Circuits
-    KEYS = %w[name voltage_v cable_label protection_label description].freeze
+    KEYS = %w[name voltage_v cable_label protection_label description panel_id require_panel].freeze
 
     def self.validate(input, defaults = {})
       Primitives.check_keys!(input, KEYS)
@@ -12,7 +12,17 @@ module HomeCAD
         Primitives.invalid!("#{key} must be a bounded nonempty string") unless valid
       end
       values['voltage_v'] = Geometry.positive_length(values['voltage_v'], 'voltage_v') unless values['voltage_v'].nil?
+      if !values['panel_id'].nil? && !Metadata.uuid?(values['panel_id'])
+        Primitives.invalid!('panel_id must be null or a HomeCAD UUID')
+      end
+      if values.key?('require_panel') && ![true,false].include?(values['require_panel'])
+        Primitives.invalid!('require_panel must be boolean')
+      end
       values
+    end
+
+    def self.validate_panel(model, params)
+      ElectricalPanels.resolve(model, { 'homecad_id' => params['panel_id'] }) if params['panel_id']
     end
 
     def self.members(model, id)
@@ -38,6 +48,7 @@ module HomeCAD
 
     def self.create(model, request)
       params = validate(request)
+      validate_panel(model, params)
       records = ElectricalData.circuits(model)
       Architecture.constraint!('at most 512 circuits are supported') if records.length >= ElectricalData::MAX_CIRCUITS
       record = { 'homecad_id' => SecureRandom.uuid, 'type' => 'electrical.circuit',
@@ -69,19 +80,21 @@ module HomeCAD
         'total' => records.length, 'limit' => limit, 'offset' => offset, 'has_more' => offset + limit < records.length }
     end
 
-    def self.update(model, request)
+    def self.update(model, request = nil, operation: 'update_circuit', **fields)
+      request ||= fields
       Primitives.check_keys!(request, %w[target changes])
       record = resolve(model, request['target'])
       changes = request['changes']
       Primitives.invalid!('changes must be a nonempty object') unless changes.is_a?(Hash) && !changes.empty?
       proposed = validate(changes, record['parameters'])
-      return result('update_circuit', record, updated: [serialize(record)]) if proposed == record['parameters']
+      validate_panel(model, proposed)
+      return result(operation, record, updated: [serialize(record)]) if proposed == record['parameters']
       Operation.run('Update circuit', model: model) do
         records = ElectricalData.circuits(model)
         changed = records.find { |item| item['homecad_id'] == record['homecad_id'] }
         changed['parameters'] = proposed; changed['revision'] += 1
         ElectricalData.write_circuits(model, records)
-        result('update_circuit', changed, updated: [serialize(changed)])
+        result(operation, changed, updated: [serialize(changed)])
       end
     end
 
@@ -97,11 +110,16 @@ module HomeCAD
     end
 
     def self.delete(model, request)
-      Primitives.check_keys!(request, %w[target detach_points])
+      Primitives.check_keys!(request, %w[target detach_points detach_routes])
       record = resolve(model, request['target'])
       detach = request.fetch('detach_points', false)
       Primitives.invalid!('detach_points must be boolean') unless [true, false].include?(detach)
       points = members(model, record['homecad_id'])
+      detach_routes = request.fetch('detach_routes', false)
+      Primitives.invalid!('detach_routes must be boolean') unless [true,false].include?(detach_routes)
+      routes = defined?(ElectricalRoutes) ? ElectricalRoutes.members(model, record['homecad_id']) : []
+      Architecture.constraint!('circuit has routes; set detach_routes=true separately') if routes.any? && !detach_routes
+      routes.each { |entity| Architecture.require_mutable!(entity) }
       Architecture.constraint!('circuit has points; set detach_points=true') if points.any? && !detach
       points.each { |entity| Architecture.require_mutable!(entity) }
       Operation.run('Delete circuit', model: model) do
@@ -111,7 +129,7 @@ module HomeCAD
         end
         ElectricalData.write_circuits(model, ElectricalData.circuits(model).reject { |item| item['homecad_id'] == record['homecad_id'] })
         result('delete_circuit', record, deleted: [serialize(record)],
-          updated: points.map { |entity| Furniture.serialize_entity(entity) })
+          updated: points.map { |entity| Furniture.serialize_entity(entity) } + routes.map { |entity| ElectricalRoutes.detach(entity) })
       end
     end
   end

@@ -11,7 +11,7 @@ module HomeCAD
       when 'create_electrical_point' then create(model, params)
       when 'update_electrical_point' then update(model, params)
       when 'delete_electrical_point' then delete(model, params)
-      when 'validate_electrical' then validate_scene(model, params)
+      when 'validate_electrical' then defined?(ElectricalRules) ? ElectricalRules.validate(model, params) : validate_scene(model, params)
       when 'assign_to_circuit' then assign(model, params)
       when 'create_circuit' then Circuits.create(model, params)
       when 'get_circuit' then Circuits.get(model, params)

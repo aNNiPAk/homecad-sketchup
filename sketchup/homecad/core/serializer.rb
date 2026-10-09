@@ -34,6 +34,10 @@ module HomeCAD
       if data['type'].to_s.start_with?('electrical.') && defined?(ElectricalData)
         result['parameters'] = safe_value(ElectricalData.read(entity))
         result['relationships'] = safe_value({ 'wall_id' => data['wall_id'], 'circuit_id' => data['circuit_id'] }.compact)
+        if data['type'] == 'electrical.cable_route' && defined?(ElectricalRoutes)
+          result['parameters'] = ElectricalRoutes.read(entity)
+          result['length_mm'] = ElectricalRoutes.length(result['parameters'])
+        end
       elsif data['type'].to_s.start_with?('architecture.') && defined?(ArchitectureData)
         result['parameters'] = safe_value(ArchitectureData.read_params(entity))
         result['relationships'] = safe_value(ArchitectureData.read_relationships(entity))

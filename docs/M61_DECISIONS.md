@@ -91,3 +91,5 @@ find_unpowered_consumers includes name, source_type (null if missing), point_id,
 derived circuit_id and reason/status. get_electrical_ruleset(ruleset="generic") is
 read-only under electrical.rules.v1; other rulesets return unsupported_operation.
 Version remains 0.14.0 for this pre-merge hardening; no release tag is created.
+
+M6.1.1 packaged acceptance on HEAD `f32426f1` passed on SketchUp 26.2.243: all 23 verification commands and native smoke/Undo cleanup succeeded, dev links restored, no cleanup errors.

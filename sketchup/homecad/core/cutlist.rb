@@ -25,7 +25,7 @@ module HomeCAD
         ]
         [records_for(params, Metadata.read(entity)['homecad_id'], type), drawer_warnings]
       else
-        kitchen_records(model, KitchenData.read(entity))
+        kitchen_records(model, KitchenData.read(entity).merge('homecad_id'=>Metadata.read(entity)['homecad_id']))
       end
       { 'target' => Serializer.serialize(entry, level: 'summary')['identity'],
         'records' => records.slice(offset, limit) || [], 'total' => records.length,
@@ -63,22 +63,17 @@ module HomeCAD
         run['modules'].map { |item| [nil, item] }
       end
       modules.each do |leg_key, item|
-        if Kitchen::APPLIANCE_TYPES.include?(item['type'])
+        params = KitchenCabinetDefinition.for_module(model, item)
+        unless params
           warnings << "module #{item['key']} is a concept appliance; no manufacturing parts inferred"
           next
         end
-        if %w[sink base_drawers].include?(item['type'])
-          warnings << "module #{item['key']} has concept-only internal details; schedule covers the generic carcass"
-        end
-        params = Furniture.validate_params!(model, {
-          'width_mm' => item['width_mm'], 'depth_mm' => item['depth_mm'],
-          'height_mm' => item['height_mm'], 'detail_level' => 'construction',
-          'material_id' => item['material_id'], 'front_material_id' => item['front_material_id'],
-          'manufacturing' => item.fetch('manufacturing', {})
-        })
+        warnings << "module #{item['key']}: drawer slide SKU/clearance are project data; mounting and compatibility unverified" if params.fetch('drawers', []).any?
         key = [leg_key && "leg:#{leg_key}", "module:#{item['key']}"].compact.join('/')
         object_id = run.fetch('semantic_objects', {}).fetch(key, {})['homecad_id']
-        records.concat(records_for(params, object_id, 'kitchen.module', prefix: key))
+        records.concat(records_for(params, object_id, 'kitchen.module', prefix: key).map do |record|
+          record.merge('run_id'=>run['homecad_id'], 'module_key'=>item['key'], 'module_type'=>item['type'])
+        end)
       end
       if run['layout_type'] == 'l_shaped' && run['corner']['mode'] == 'blind_cabinet'
         corner = run['corner']

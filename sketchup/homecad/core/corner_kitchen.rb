@@ -9,7 +9,7 @@ module HomeCAD
                   start_clearance_mm end_clearance_mm filler_max_mm constraints].freeze
     CORNER_KEYS = %w[mode span_first_mm span_second_mm access_leg].freeze
 
-    def self.plan(model, input, exclude_id: nil, overrides: {})
+    def self.plan(model, input, exclude_id: nil, overrides: {}, preserve_legacy: false)
       Primitives.check_keys!(input, %w[layout_type legs corner name countertop panels])
       legs = input['legs']
       invalid!('legs must contain exactly two ordered wall legs') unless legs.is_a?(Array) && legs.length == 2
@@ -95,7 +95,7 @@ module HomeCAD
                        'countertop' => false, 'plinth' => false)
         constraints = request.fetch('constraints', {}).merge('require_countertop' => false)
         request['constraints'] = constraints
-        leg_plan = Kitchen.plan(model, request, exclude_id: exclude_id)
+        leg_plan = Kitchen.plan(model, request, exclude_id: exclude_id, preserve_legacy: preserve_legacy)
         constraint!('L-shaped KitchenRun supports base modules only') unless leg_plan.dig('params', 'tier') == 'base'
         constraint!('leg modules exceed proposed Wall height') if leg_plan.dig('params', 'top_mm') >
           item['wall']['height_mm'] + Kitchen::TOLERANCE_MM
@@ -219,7 +219,7 @@ module HomeCAD
     end
 
     def self.apply(model, supplied)
-      fresh = plan(model, editable(supplied['params']))
+      fresh = plan(model, editable(supplied['params']), preserve_legacy: true)
       constraint!('corner kitchen plan is stale or changed; plan again') unless fresh == supplied
       constraint!('corner kitchen plan has conflicts') unless fresh['conflicts'].empty?
       values = fresh['params']
@@ -245,7 +245,7 @@ module HomeCAD
     end
 
     def self.validate(model, root, values)
-      fresh = plan(model, editable(values), exclude_id: Metadata.read(root)['homecad_id'])
+      fresh = plan(model, editable(values), exclude_id: Metadata.read(root)['homecad_id'], preserve_legacy: true)
       { 'homecad_id' => Metadata.read(root)['homecad_id'],
         'layout_type' => 'l_shaped', 'valid' => fresh['conflicts'].empty?,
         'conflicts' => fresh['conflicts'], 'warnings' => fresh['warnings'],
@@ -259,7 +259,7 @@ module HomeCAD
       invalid!('changes must be a nonempty object') unless changes.is_a?(Hash) && !changes.empty?
       Primitives.check_keys!(changes, %w[legs corner name countertop panels])
       proposed = plan(model, editable(current).merge(changes),
-        exclude_id: Metadata.read(root)['homecad_id'])
+        exclude_id: Metadata.read(root)['homecad_id'], preserve_legacy: !changes.key?('legs'))
       constraint!('updated corner kitchen has conflicts') unless proposed['conflicts'].empty?
       values = proposed['params']
       revision = Metadata.read(root)['revision']
@@ -290,7 +290,7 @@ module HomeCAD
     def self.preflight_host_update(model, root, overrides)
       current = KitchenData.read(root)
       proposal = plan(model, editable(current), exclude_id: Metadata.read(root)['homecad_id'],
-        overrides: overrides)
+        overrides: overrides, preserve_legacy: true)
       constraint!('Wall update would invalidate corner KitchenRun') unless proposal['conflicts'].empty?
       [root, current, proposal['params']]
     end
@@ -323,10 +323,7 @@ module HomeCAD
             'span_z_mm' => item['height_mm'] }
           group.transformation = WallAttachment.wall_transform(frame, normalized['thickness_mm'],
             attachment, wall_height_mm: normalized['height_mm'])
-          cabinet = Furniture.validate_params!(model, {
-            'width_mm' => item['width_mm'], 'depth_mm' => item['depth_mm'],
-            'height_mm' => item['height_mm'], 'detail_level' => 'concept' })
-          Furniture.build_geometry!(group, cabinet)
+          KitchenCabinetDefinition.build!(model, group, item)
         end
         next unless leg['filler_mm'].positive?
 

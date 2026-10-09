@@ -76,9 +76,11 @@ class CutlistTest < Minitest::Test
       ] })
     result = HomeCAD::Kitchen.apply(@model, 'plan' => plan)
     schedule = HomeCAD::Cutlist.generate(@model, 'target' => target(result))
-    assert_equal 5, schedule['total']
-    assert schedule['records'].all? { |record| record['material_id'] == 'white-board' }
-    assert schedule['warnings'].any? { |message| message.include?('oven') }
+    assert_equal 11, schedule['total']
+    shelf_records = schedule['records'].select { |record| record['module_key'] == 'shelves' }
+    assert_equal 6, shelf_records.length
+    assert shelf_records.all? { |record| record['material_id'] == 'white-board' }
+    assert schedule['records'].any? { |record| record['module_type'] == 'oven' }
     assert_raises(HomeCAD::Runtime::BridgeError) do
       HomeCAD::Cutlist.generate(@model, 'target' => target(result), 'limit' => 101)
     end

@@ -1,6 +1,7 @@
 require_relative 'test_furniture'
 require_relative '../../sketchup/homecad/core/service_zones'
 require_relative '../../sketchup/homecad/core/kitchen'
+require_relative '../../sketchup/homecad/core/kitchen_cabinet_definition'
 require_relative '../../sketchup/homecad/core/kitchen_variants'
 require_relative '../../sketchup/homecad/core/corner_kitchen'
 

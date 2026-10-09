@@ -90,7 +90,7 @@ module HomeCAD
       end
     end
 
-    def self.plan(model, input, exclude_id: nil)
+    def self.plan(model, input, exclude_id: nil, preserve_legacy: false)
       Primitives.check_keys!(input, INPUT_KEYS)
       selector = input['wall'] || { 'homecad_id' => input['wall_id'] }
       wall, wall_params, wall_metadata = Architecture.wall_entity!(model, selector)
@@ -115,7 +115,7 @@ module HomeCAD
       normalized = modules.map.with_index do |item, index|
         invalid!("modules[#{index}] must be an object") unless item.is_a?(Hash)
         Primitives.check_keys!(item, %w[key type width_mm depth_mm height_mm bottom_mm
-                                       service_clearance_mm material_id front_material_id manufacturing])
+                                       service_clearance_mm] + KitchenCabinetDefinition::FIELDS)
         kind = item['type']
         invalid!("unsupported module type: #{kind.inspect}") unless TYPES.key?(kind)
         current_tier = TYPES[kind]
@@ -130,19 +130,12 @@ module HomeCAD
         height = Geometry.positive_length(item.fetch('height_mm', height), "modules[#{index}].height_mm")
         bottom = number(item.fetch('bottom_mm', bottom), "modules[#{index}].bottom_mm")
         constraint!('module bottom must be nonnegative') if bottom.negative?
-        constraint!('module width and height must exceed 36 mm for the Cabinet case') if width <= 36 || height <= 36
         value = { 'key' => key, 'type' => kind, 'width_mm' => width,
           'depth_mm' => depth, 'height_mm' => height, 'bottom_mm' => bottom }
         %w[material_id front_material_id].each do |field|
           value[field] = Furniture.validate_identifier(item[field], "modules[#{index}].#{field}") if item.key?(field)
         end
-        if item.key?('manufacturing')
-          cabinet = Furniture.validate_params!(model, {
-            'width_mm' => width, 'depth_mm' => depth, 'height_mm' => height,
-            'manufacturing' => item['manufacturing']
-          })
-          value['manufacturing'] = cabinet['manufacturing']
-        end
+        KitchenCabinetDefinition.normalize!(model, value, item, preserve_legacy: preserve_legacy)
         if item.key?('service_clearance_mm')
           service = item['service_clearance_mm']
           invalid!('service_clearance_mm must be an object') unless service.is_a?(Hash)
@@ -448,7 +441,7 @@ module HomeCAD
       supplied = request['plan']
       invalid!('plan must be an object from plan_kitchen_run') unless supplied.is_a?(Hash) && supplied['params'].is_a?(Hash)
       return CornerKitchen.apply(model, supplied) if supplied['params']['layout_type'] == 'l_shaped'
-      fresh = plan(model, editable_input(supplied['params']))
+      fresh = plan(model, editable_input(supplied['params']), preserve_legacy: true)
       constraint!('kitchen plan is stale or changed; plan again') unless supplied == fresh
       constraint!('kitchen plan has conflicts') unless fresh['conflicts'].empty?
       values = fresh['params']
@@ -500,11 +493,7 @@ module HomeCAD
           Geometry.point_mm([x, 0.0, module_data['bottom_mm']], 'module_origin_mm'),
           Geom::Vector3d.new(1, 0, 0), Geom::Vector3d.new(0, 1, 0),
           Geom::Vector3d.new(0, 0, 1))
-        cabinet = Furniture.validate_params!(model, {
-          'width_mm' => module_data['width_mm'], 'depth_mm' => module_data['depth_mm'],
-          'height_mm' => module_data['height_mm'], 'detail_level' => 'concept'
-        })
-        Furniture.build_geometry!(group, cabinet)
+        KitchenCabinetDefinition.build!(model, group, module_data)
       end
       if plan_data['filler_mm'] > TOLERANCE_MM
         x = values['side'] == 'positive_v' ? span - plan_data['filler_mm'] : 0.0
@@ -552,7 +541,7 @@ module HomeCAD
       root, values = resolve_run(model, request['target'])
       return CornerKitchen.validate(model, root, values) if values['layout_type'] == 'l_shaped'
       id = Metadata.read(root)['homecad_id']
-      current = plan(model, editable_input(values), exclude_id: id)
+      current = plan(model, editable_input(values), exclude_id: id, preserve_legacy: true)
       { 'homecad_id' => id, 'valid' => current['conflicts'].empty?,
         'conflicts' => current['conflicts'], 'warnings' => current['warnings'],
         'service_zones' => current['service_zones'], 'service_findings' => current['service_findings'],
@@ -568,7 +557,7 @@ module HomeCAD
       invalid!('changes must be a nonempty object') unless changes.is_a?(Hash) && !changes.empty?
       Primitives.check_keys!(changes, INPUT_KEYS - %w[wall wall_id])
       input = editable_input(current)
-      proposed = plan(model, input.merge(changes), exclude_id: Metadata.read(root)['homecad_id'])
+      proposed = plan(model, input.merge(changes), exclude_id: Metadata.read(root)['homecad_id'], preserve_legacy: !changes.key?('modules'))
       constraint!('updated run has conflicts') unless proposed['conflicts'].empty?
       values = proposed['params']
       wall, = Architecture.wall_entity!(model, { 'homecad_id' => values['wall_id'] })

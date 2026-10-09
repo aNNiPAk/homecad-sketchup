@@ -58,6 +58,7 @@ jobs:
           ruby tests/ruby/test_electrical.rb
           ruby tests/ruby/test_electrical_system.rb
           ruby tests/ruby/test_kitchen.rb
+          ruby tests/ruby/test_kitchen_composition.rb
 
       - name: Build RBZ
         run: uv run --project mcp python scripts/build_rbz.py

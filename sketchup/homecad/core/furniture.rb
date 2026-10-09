@@ -35,7 +35,7 @@ module HomeCAD
     TYPES = %w[furniture.cabinet].freeze
     CREATE_KEYS = %w[width_mm depth_mm height_mm panel_thickness_mm back_thickness_mm
                      shelf_z_mm fronts detail_level placement name material_id front_material_id
-                      manufacturing drawers].freeze
+                      manufacturing drawers top_panel].freeze
     CHANGE_KEYS = (CREATE_KEYS - ['name'] + ['name']).freeze
     TOLERANCE_MM = 0.01
 
@@ -52,7 +52,7 @@ module HomeCAD
       end
     end
 
-    def self.validate_params!(model, input, defaults: nil)
+    def self.validate_params!(model, input, defaults: nil, allow_unknown_drawer_sku: false)
       values = (defaults || {}).merge(input)
       %w[width_mm depth_mm height_mm].each do |key|
         values[key] = Geometry.positive_length(values[key], key)
@@ -66,7 +66,8 @@ module HomeCAD
       constraint!('back_thickness_mm must be less than cabinet depth') if values['back_thickness_mm'] >= values['depth_mm']
       values['shelf_z_mm'] = validate_shelves!(values.fetch('shelf_z_mm', []), values)
       values['fronts'] = validate_fronts!(values.fetch('fronts', []), values)
-      DrawerHardware.normalize!(values) if values.key?('drawers')
+      DrawerHardware.normalize!(values, allow_unknown_sku: allow_unknown_drawer_sku) if values.key?('drawers')
+      invalid!('top_panel must be boolean') if values.key?('top_panel') && ![true, false].include?(values['top_panel'])
       values['detail_level'] = values.fetch('detail_level', 'construction')
       invalid!('detail_level must be concept or construction') unless DETAIL_LEVELS.include?(values['detail_level'])
       values['name'] = values.fetch('name', 'Cabinet')
@@ -279,6 +280,7 @@ module HomeCAD
           'thickness_mm' => front['thickness_mm'], 'origin_mm' => [front['x_mm'], depth, front['z_mm']],
           'hinge' => front['hinge'] }
       end
+      parts.reject! { |part| part['part_key'] == 'top' } if params['top_panel'] == false
       parts + DrawerHardware.parts(params)
     end
 
@@ -348,8 +350,6 @@ module HomeCAD
       elsif part['part_key'].end_with?('_side')
         # Side panel plane is X/Z; its depth dimension occupies local Y.
         sx, sy, sz = part['thickness_mm'], part['width_mm'], part['height_mm']
-        x = part['part_key'] == 'right_side' ? root_width_mm(root) - part['thickness_mm'] : 0.0
-        y = 0.0; z = 0.0
       elsif part['part_kind'] == 'drawer_base' || part['part_key'] == 'bottom' || part['part_key'] == 'top'
         sx, sy, sz = part['width_mm'], part['height_mm'], part['thickness_mm']
       elsif part['part_key'] == 'back'
@@ -377,11 +377,6 @@ module HomeCAD
       end
 
       face.pushpull(normal_z.positive? ? distance : -distance)
-    end
-
-    def self.root_width_mm(root)
-      params = FurnitureData.read_params(root)
-      params.fetch('width_mm', 0).to_f
     end
 
     def self.get_frame(model, params)
@@ -460,7 +455,7 @@ module HomeCAD
         FurnitureData.canonical(FurnitureData.read_source(entity)) != FurnitureData.canonical(source)
       return mutation_result('update_furniture_object', updated: [entity], revision: Metadata.read(entity)['revision']) unless domain_state_changed
 
-      geometry_changed = %w[width_mm depth_mm height_mm panel_thickness_mm back_thickness_mm shelf_z_mm fronts detail_level drawers].any? do |key|
+      geometry_changed = %w[width_mm depth_mm height_mm panel_thickness_mm back_thickness_mm shelf_z_mm fronts detail_level drawers top_panel].any? do |key|
         current[key] != proposed[key]
       end
       Operation.run('Update cabinet', model: model) do

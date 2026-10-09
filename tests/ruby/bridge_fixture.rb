@@ -336,7 +336,7 @@ root = File.expand_path('../../sketchup/homecad', __dir__)
 %w[config errors logging framing operation].each do |name|
   require File.join(root, 'runtime', name)
 end
-%w[domain_hooks units metadata scene targeting serializer mutation inspection measurement capture geometry primitives mutations architecture wall_attachment multi_wall_attachment project_settings furniture_data hardware_catalog drawer_hardware furniture furniture_presets service_zones kitchen kitchen_variants corner_kitchen cutlist scene_volumes electrical_data circuits electrical electrical_panels electrical_consumers electrical_routes electrical_rules electrical_system].each do |name|
+%w[domain_hooks units metadata scene targeting serializer mutation inspection measurement capture geometry primitives mutations architecture wall_attachment multi_wall_attachment project_settings furniture_data hardware_catalog drawer_hardware furniture furniture_presets service_zones kitchen kitchen_cabinet_definition kitchen_variants corner_kitchen cutlist scene_volumes electrical_data circuits electrical electrical_panels electrical_consumers electrical_routes electrical_rules electrical_system].each do |name|
   require File.join(root, 'core', name)
 end
 require File.join(root, 'runtime', 'dispatcher')

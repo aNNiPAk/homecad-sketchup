@@ -5,7 +5,7 @@ module HomeCAD
     INPUT_KEYS = %w[key front_key bottom_mm height_mm depth_mm side_thickness_mm
                     base_thickness_mm slide].freeze
 
-    def self.normalize!(params)
+    def self.normalize!(params, allow_unknown_sku: false)
       drawers = params['drawers']
       invalid!('drawers must be an array of at most 16 entries') unless
         drawers.is_a?(Array) && drawers.length <= MAX_DRAWERS
@@ -43,7 +43,7 @@ module HomeCAD
         constraint!("hardware family is not a wood-drawer slide pair") unless
           family['id'] == HardwareCatalog::FAMILY_ID && family['unit'] == 'pair'
         sku = Furniture.validate_identifier(slide['sku'], "drawers.#{key}.slide.sku")
-        invalid!("drawers.#{key}.slide.sku is required") unless sku
+        invalid!("drawers.#{key}.slide.sku is required") unless sku || allow_unknown_sku
         nominal = Geometry.positive_length(slide['nominal_length_mm'],
           "drawers.#{key}.slide.nominal_length_mm")
         clearance = Geometry.positive_length(slide['side_clearance_mm'],

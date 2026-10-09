@@ -1,5 +1,14 @@
 # M5 Kitchen Core decisions
 
+## M5.8 composition
+
+See ADR 0006 for the accepted implementation sequence. Kitchen cabinet-like modules
+derive construction geometry and manufacturing records through one
+KitchenCabinetDefinition and Furniture.part_schedule. The shared Furniture generator
+uses part origins instead of reading Cabinet metadata from a Kitchen semantic root.
+New plans snapshot project thickness/material defaults; legacy unversioned module
+records retain their effective fixed defaults when inspected or renamed.
+
 ## Implementation plan
 
 1. Reuse the M3 Wall frame and M4 Cabinet generator for a managed KitchenRun.

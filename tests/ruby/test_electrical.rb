@@ -169,6 +169,8 @@ class ElectricalTest < Minitest::Test
     diagonal = Math.sqrt(0.5)
     b = { center: [1.3,1.3,0], axes: [[diagonal,diagonal,0], [-diagonal,diagonal,0], [0,0,1]], half: [0.2,1,0.2] }
     refute HomeCAD::SceneVolumes.overlap?(a, b)
+    tilted = { center: [1.3,0,1.3], axes: [[diagonal,0,diagonal], [0,1,0], [-diagonal,0,diagonal]], half: [0.2,0.2,1] }
+    refute HomeCAD::SceneVolumes.overlap?(a, tilted), 'AABB overlap must not imply an oblique OBB collision'
   end
 
   def test_circuit_bounds_invalid_record_and_readonly
@@ -223,5 +225,38 @@ class ElectricalTest < Minitest::Test
     HomeCAD::Circuits.update(@model, 'target' => target(id), 'changes' => { 'name' => 'Kitchen' })
     assert_empty @model.events
     assert_equal 1, HomeCAD::Circuits.resolve(@model, target(id))['revision']
+  end
+
+  def test_successful_point_update_keeps_root_uuid_then_delete_updates_chain
+    id = point; a = circuit
+    HomeCAD::Electrical.assign(@model, 'target' => target(id), 'circuit_id' => a)
+    e = entity(id); persistent_id = e.persistent_id
+    @model.events.clear
+    result = HomeCAD::Electrical.update(@model, 'target' => target(id),
+      'changes' => { 'dimensions_mm' => { 'width_mm' => 100, 'height_mm' => 60, 'depth_mm' => 30 }, 'quantity' => 2 })
+    assert_equal 3, result['revision']; assert_equal persistent_id, entity(id).persistent_id
+    assert_equal id, HomeCAD::Metadata.read(e)['homecad_id']
+    assert_equal 950, HomeCAD::WallAttachment.read(e)['offset_mm']
+    assert_equal [:start, :commit], @model.events.map(&:first)
+    @model.events.clear
+    deleted = HomeCAD::Electrical.delete(@model, 'target' => target(id))
+    assert_equal a, deleted['deleted'].first.dig('parameters', 'circuit_id')
+    assert_empty HomeCAD::Circuits.members(@model, a)
+    assert_equal 3, HomeCAD::Circuits.resolve(@model, target(a))['revision']
+    assert_equal [:start, :commit], @model.events.map(&:first)
+  end
+
+  def test_circuit_successful_update_and_invalid_changes_are_atomic
+    id = circuit
+    changed = HomeCAD::Circuits.update(@model, 'target' => target(id),
+      'changes' => { 'name' => 'New', 'voltage_v' => 230, 'protection_label' => 'PROJECT' })
+    assert_equal 2, changed['revision']
+    before = HomeCAD::Circuits.resolve(@model, target(id))
+    @model.events.clear
+    assert_raises(HomeCAD::Runtime::BridgeError) do
+      HomeCAD::Circuits.update(@model, 'target' => target(id), 'changes' => { 'voltage_v' => 0 })
+    end
+    assert_empty @model.events
+    assert_equal before, HomeCAD::Circuits.resolve(@model, target(id))
   end
 end

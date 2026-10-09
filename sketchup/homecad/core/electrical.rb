@@ -26,7 +26,10 @@ module HomeCAD
     end
 
     def self.points(model)
-      model.entities.to_a.select { |entity| KINDS.map { |kind| "electrical.#{kind}" }.include?(Metadata.read(entity)['type']) }
+      model.entities.to_a.select do |entity|
+        entity.is_a?(Sketchup::Group) && entity.valid? &&
+          KINDS.map { |kind| "electrical.#{kind}" }.include?(Metadata.read(entity)['type'])
+      end
     end
 
     def self.vector(value, label)

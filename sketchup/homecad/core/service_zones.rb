@@ -77,51 +77,7 @@ module HomeCAD
     end
 
     def self.obstacles(model, exclude_run_id: nil)
-      model.entities.to_a.filter_map do |entity|
-        data = Metadata.read(entity)
-        id = data['homecad_id']
-        next unless id && id != exclude_run_id
-
-        type = data['type']
-        boxes = case type
-                when 'architecture.wall'
-                  params = ArchitectureData.read_params(entity)
-                  frame = frame_from_wall(params)
-                  cuts = Architecture.hosted_for(model, id).map do |host|
-                    ArchitectureData.read_params(host).merge('type' => Metadata.read(host)['type'])
-                  end
-                  wall = Architecture.validate_wall_params!(params).last
-                  length = WallFrame.build(params['start_mm'], params['end_mm']).length_mm
-                  Architecture.wall_occupied_cells(length, wall['thickness_mm'], wall['height_mm'], cuts)
-                    .map { |limits| box(*frame, limits) }
-                when 'architecture.column', 'furniture.cabinet'
-                  params = type == 'architecture.column' ? ArchitectureData.read_params(entity) : FurnitureData.read_params(entity)
-                  frame = if type == 'architecture.column'
-                    radians = params.fetch('rotation_degrees', 0) * Math::PI / 180.0
-                    cosine = Math.cos(radians); sine = Math.sin(radians)
-                    [params['origin_mm'], [cosine, sine, 0], [-sine, cosine, 0]]
-                  else
-                    frame_from_transform(entity.transformation)
-                  end
-                  [box(*frame,
-                       [0, params['width_mm'], 0, params['depth_mm'], 0, params['height_mm']])]
-                when 'kitchen.run'
-                  params = KitchenData.read(entity)
-                  if params['layout_type'] == 'l_shaped'
-                    CornerKitchen.occupied_boxes(model, params)
-                  else
-                    frame = frame_from_wall(Architecture.wall_entity!(model,
-                      { 'homecad_id' => params['wall_id'] })[1], side: params['side'])
-                    Kitchen.occupied_rectangles(params).map do |part|
-                      [part['key'], box(*frame, [part['offset_mm'], part['offset_mm'] + part['width_mm'],
-                        part['depth_offset_mm'], part['depth_offset_mm'] + part['depth_mm'],
-                        part['bottom_mm'], part['bottom_mm'] + part['height_mm']])]
-                    end
-                  end
-                else next
-                end
-        { 'homecad_id' => id, 'type' => type, 'boxes' => boxes }
-      end
+      SceneVolumes.obstacles(model, exclude_id: exclude_run_id)
     end
 
     def self.check(model, params, exclude_run_id: nil)

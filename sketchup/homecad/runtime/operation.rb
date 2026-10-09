@@ -12,6 +12,7 @@ module HomeCAD
         raise RuntimeError, 'SketchUp did not start operation' unless started
 
         result = yield(model)
+        result = DomainHooks.after_mutation(model, result) if defined?(DomainHooks)
         model.commit_operation
         result
       rescue StandardError

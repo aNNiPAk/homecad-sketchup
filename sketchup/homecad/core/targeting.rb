@@ -1,6 +1,16 @@
 module HomeCAD
   module Targeting
     ID_KEYS = %w[homecad_id persistent_id entity_id].freeze
+    # Logical project records have UUID identity but no SketchUp entity IDs.
+    def self.resolve_record(records, selector)
+      unless selector.is_a?(Hash) && selector.keys == ['homecad_id'] && Metadata.uuid?(selector['homecad_id'])
+        raise Runtime::BridgeError.new(-32602, 'invalid_request', 'record target requires an exact HomeCAD UUID')
+      end
+      matches = records.select { |record| record['homecad_id'] == selector['homecad_id'] }
+      raise Runtime::BridgeError.new(-32002, 'target_not_found', 'record not found') if matches.empty?
+      raise Runtime::BridgeError.new(-32003, 'ambiguous_target', 'record UUID is duplicated') if matches.length > 1
+      matches.first
+    end
     FILTER_KEYS = (ID_KEYS + %w[entity_type homecad_type name tag parent_id room_id metadata]).freeze
 
     def self.metadata(entity)

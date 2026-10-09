@@ -760,7 +760,7 @@ module HomeCAD
       if Metadata.read(entity)['type'] == 'furniture.cabinet' && defined?(FurnitureData)
         serialized['parameters'] = FurnitureData.read_params(entity)
         serialized['relationships'] = FurnitureData.read_relationships(entity)
-      else
+      elsif Metadata.read(entity)['type'].to_s.start_with?('architecture.')
         serialized['parameters'] = ArchitectureData.read_params(entity)
         serialized['relationships'] = ArchitectureData.read_relationships(entity)
       end

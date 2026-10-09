@@ -31,7 +31,10 @@ module HomeCAD
       result.merge!('metadata' => safe_value(data),
                     'transformation' => transformation(entry),
                     'children' => child_summary(entity))
-      if data['type'].to_s.start_with?('architecture.') && defined?(ArchitectureData)
+      if data['type'].to_s.start_with?('electrical.') && defined?(ElectricalData)
+        result['parameters'] = safe_value(ElectricalData.read(entity))
+        result['relationships'] = safe_value({ 'wall_id' => data['wall_id'], 'circuit_id' => data['circuit_id'] }.compact)
+      elsif data['type'].to_s.start_with?('architecture.') && defined?(ArchitectureData)
         result['parameters'] = safe_value(ArchitectureData.read_params(entity))
         result['relationships'] = safe_value(ArchitectureData.read_relationships(entity))
       elsif data['type'] == 'furniture.cabinet' && defined?(FurnitureData)

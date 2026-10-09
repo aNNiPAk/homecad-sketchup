@@ -27,6 +27,7 @@ METHOD_CAPABILITIES = {
     "connect_consumer": "electrical.consumers.v1",
     "find_unpowered_consumers": "electrical.consumers.v1",
     "get_circuit_load": "electrical.load.v1",
+    "get_electrical_ruleset": "electrical.rules.v1",
     "create_cable_route": "electrical.routes.v1",
     "get_cable_route": "electrical.routes.v1",
     "list_cable_routes": "electrical.routes.v1",

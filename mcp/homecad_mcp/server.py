@@ -198,6 +198,11 @@ async def find_unpowered_consumers(limit: int = 50, offset: int = 0) -> dict:
     return await _scene_call("find_unpowered_consumers", {"limit": limit, "offset": offset})
 
 @mcp.tool(annotations=READ_ONLY_TOOL)
+async def get_electrical_ruleset(ruleset: str = "generic") -> dict:
+    """Describe available Electrical consistency checks and their limitations."""
+    return await _scene_call("get_electrical_ruleset", {"ruleset": ruleset})
+
+@mcp.tool(annotations=READ_ONLY_TOOL)
 async def get_circuit_load(target: dict) -> dict:
     """Sum only explicit known consumer power; current is an informational project estimate."""
     return await _scene_call("get_circuit_load", {"target": target})

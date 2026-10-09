@@ -13,7 +13,7 @@ NAMES = {name for name,cap in METHOD_CAPABILITIES.items() if cap in CAPS}
 @pytest.mark.asyncio
 async def test_m61_schemas_annotations_and_forwarding(monkeypatch):
     tools={tool.name:tool for tool in await server.mcp.list_tools()}
-    assert len(NAMES)==18 and NAMES <= tools.keys()
+    assert len(NAMES)==19 and NAMES <= tools.keys()
     for name in NAMES:
         readonly=name.startswith(('get_','list_','find_'))
         assert tools[name].annotations.readOnlyHint == readonly
@@ -44,6 +44,7 @@ async def test_m61_schemas_annotations_and_forwarding(monkeypatch):
     await server.connect_consumer(target,None)
     await server.find_unpowered_consumers(1,2)
     await server.get_circuit_load(target)
+    await server.get_electrical_ruleset()
     await server.create_cable_route('R','circuit',[[0,0,0],[100,0,0]])
     await server.get_cable_route(target)
     await server.list_cable_routes(1,2)
@@ -107,13 +108,22 @@ async def test_m61_cross_language_graph_and_source_lifecycle():
         source=next(r['homecad_id'] for r in kitchen['created'] if r['homecad_type']=='kitchen.appliance')
         consumer=await client.call('create_consumer',{'name':'Dishwasher','source_object_id':source,'rated_power_w':2000,'voltage_v':230})
         uid=consumer['created'][0]['homecad_id']
-        assert (await client.call('find_unpowered_consumers'))['consumers'][0]['status']=='missing_point'
+        missing=(await client.call('find_unpowered_consumers'))['consumers'][0]
+        assert missing['status']=='missing_point' and missing['reason']=='missing_point'
+        assert missing['name']=='Dishwasher' and missing['source_type']=='kitchen.appliance'
+        assert missing['point_id'] is None and missing['circuit_id'] is None
+        assert (await client.call('get_distribution_panel',{'target':{'homecad_id':pid}}))['metadata']['revision']==2
+        rules=await client.call('get_electrical_ruleset')
+        assert rules['ruleset']=='generic' and 'collision' in rules['checks']
         await client.call('connect_consumer',{'target':{'homecad_id':uid},'point_id':point})
         load=await client.call('get_circuit_load',{'target':{'homecad_id':cid}})
         assert load['rated_power_w']==2000 and load['consumer_ids']==[uid]
         assert load['estimated_current_a']==pytest.approx(2000/230)
         route=await client.call('create_cable_route',{'name':'Route','circuit_id':cid,'path_mm':[[0,0,0],[100,0,0]]})
         assert route['created'][0]['length_mm']==100
+        graph=await client.call('get_circuit',{'target':{'homecad_id':cid}})
+        assert graph['consumer_ids']==[uid] and graph['route_ids']==[route['created'][0]['homecad_id']]
+        assert graph['panel_id']==pid and graph['member_ids']==[point]
         with pytest.raises(BridgeError) as error:
             await client.call('delete_circuit',{'target':{'homecad_id':cid},'detach_points':True})
         assert error.value.category=='constraint_violation'

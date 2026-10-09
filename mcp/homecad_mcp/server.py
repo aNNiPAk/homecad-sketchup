@@ -663,7 +663,8 @@ async def plan_kitchen_run(wall: dict, start_mm: float, end_mm: float,
                            filler_max_mm: float = 150, countertop: bool | None = None,
                            countertop_thickness_mm: float = 38,
                            plinth: bool | None = None, constraints: dict | None = None,
-                           name: str = "Kitchen run") -> dict:
+                           name: str = "Kitchen run",
+                           countertop_cutouts: list[dict] | None = None) -> dict:
     """Plan ordered modules on one Wall side in millimeters without modifying SketchUp."""
     params = {"wall": wall, "start_mm": start_mm, "end_mm": end_mm,
               "side": side, "modules": modules, "clearance_mm": clearance_mm,
@@ -677,6 +678,8 @@ async def plan_kitchen_run(wall: dict, start_mm: float, end_mm: float,
         params["countertop"] = countertop
     if plinth is not None:
         params["plinth"] = plinth
+    if countertop_cutouts is not None:
+        params["countertop_cutouts"] = countertop_cutouts
     return await _scene_call("plan_kitchen_run", params)
 
 

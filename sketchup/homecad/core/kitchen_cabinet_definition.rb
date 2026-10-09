@@ -62,7 +62,9 @@ module HomeCAD
         'shelf_z_mm'=>shelves, 'fronts'=>fronts, 'detail_level'=>'construction')
       params['top_panel'] = false if %w[sink hob].include?(item['type'])
       if item['type'] == 'base_drawers'
+        Architecture.constraint!('use drawers or drawer_layout, not both') if item.key?('drawers') && item.key?('drawer_layout')
         params['drawers'] = item.fetch('drawers', default_drawers(item, params))
+        Architecture.constraint!('base_drawers requires at least one drawer') unless params['drawers'].is_a?(Array) && params['drawers'].any?
       elsif item.key?('drawers') || item.key?('drawer_layout')
         Architecture.constraint!('drawers and drawer_layout require base_drawers')
       end
@@ -122,7 +124,7 @@ module HomeCAD
         face = group.entities.add_face([[0,0,0], [item['width_mm'],0,0],
           [item['width_mm'],item['depth_mm'],0], [0,item['depth_mm'],0]].map { |p| Geometry.point_mm(p, 'appliance') })
         Primitives.geometry_created!(face, 'SketchUp could not create appliance volume')
-        face.pushpull(Units.mm_to_internal(item['height_mm']))
+        Furniture.extrude_to_positive_z!(face, Units.mm_to_internal(item['height_mm']), 'appliance')
       end
     end
   end

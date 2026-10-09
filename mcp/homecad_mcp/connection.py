@@ -220,6 +220,8 @@ class BridgeClient:
         if method == "assign_to_circuit" and "electrical.points.v1" not in capabilities:
             raise BridgeError("unsupported_operation", "assign_to_circuit requires 'electrical.points.v1'", -32601)
         request = params or {}
+        if BridgeClient._uses_kitchen_composition(method, request) and "kitchen.composition.v1" not in capabilities:
+            raise BridgeError("unsupported_operation", f"'{method}' requires 'kitchen.composition.v1' for module composition or straight cutouts", -32601)
         added = []
         changes = request.get("changes") if method == "update_circuit" else request
         if method in {"create_circuit", "update_circuit"} and isinstance(changes, dict):
@@ -262,6 +264,28 @@ class BridgeClient:
                 "Install a HomeCAD RBZ with drawer assembly support and restart SketchUp.",
                 -32601,
             )
+
+    @staticmethod
+    def _uses_kitchen_composition(method: str, params: dict[str, Any]) -> bool:
+        if method in {"plan_kitchen_run", "plan_corner_kitchen_run"}:
+            values = params
+        elif method == "apply_kitchen_run":
+            plan = params.get("plan")
+            values = plan.get("params", {}) if isinstance(plan, dict) else {}
+        elif method == "update_kitchen_run":
+            values = params.get("changes", {})
+        else:
+            return False
+        if not isinstance(values, dict):
+            return False
+        if "countertop_cutouts" in values:
+            return True
+        modules = list(values.get("modules", [])) if isinstance(values.get("modules"), list) else []
+        for leg in values.get("legs", []) if isinstance(values.get("legs"), list) else []:
+            if isinstance(leg, dict) and isinstance(leg.get("modules"), list):
+                modules.extend(leg["modules"])
+        fields = {"composition_version", "panel_thickness_mm", "back_thickness_mm", "shelf_z_mm", "fronts", "drawers", "drawer_layout"}
+        return any(isinstance(module, dict) and fields.intersection(module) for module in modules)
 
     @staticmethod
     def _uses_cabinet_drawers(method: str, params: dict[str, Any]) -> bool:

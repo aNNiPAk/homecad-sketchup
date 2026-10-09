@@ -2,7 +2,7 @@ require 'json'
 require 'socket'
 
 module HomeCAD
-  VERSION = '0.14.0'
+  VERSION = '0.15.0'
   PROTOCOL_VERSION = 1
 end
 
@@ -34,6 +34,7 @@ Sketchup.require 'homecad/core/service_zones'
 Sketchup.require 'homecad/core/scene_volumes'
 Sketchup.require 'homecad/core/kitchen'
 Sketchup.require 'homecad/core/kitchen_cabinet_definition'
+Sketchup.require 'homecad/core/countertop_cutouts'
 Sketchup.require 'homecad/core/kitchen_variants'
 Sketchup.require 'homecad/core/corner_kitchen'
 Sketchup.require 'homecad/core/cutlist'

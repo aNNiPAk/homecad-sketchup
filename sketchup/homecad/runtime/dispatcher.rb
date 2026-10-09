@@ -18,6 +18,7 @@ module HomeCAD
         kitchen.service_zone.v1
         kitchen.corner_run.v1
         kitchen.variants.v1
+        kitchen.composition.v1
         electrical.points.v1
         electrical.circuits.v1
         electrical.panels.v1

@@ -35,7 +35,7 @@ module HomeCAD
     TYPES = %w[furniture.cabinet].freeze
     CREATE_KEYS = %w[width_mm depth_mm height_mm panel_thickness_mm back_thickness_mm
                      shelf_z_mm fronts detail_level placement name material_id front_material_id
-                      manufacturing drawers top_panel].freeze
+                      manufacturing drawers].freeze
     CHANGE_KEYS = (CREATE_KEYS - ['name'] + ['name']).freeze
     TOLERANCE_MM = 0.01
 

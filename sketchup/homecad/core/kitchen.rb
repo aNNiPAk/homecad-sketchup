@@ -73,7 +73,7 @@ module HomeCAD
     }.freeze
     INPUT_KEYS = %w[wall wall_id start_mm end_mm start_clearance_mm end_clearance_mm
                     side modules clearance_mm filler_max_mm countertop
-                    countertop_thickness_mm plinth constraints name].freeze
+                    countertop_thickness_mm countertop_cutouts plinth constraints name].freeze
     CONSTRAINT_KEYS = %w[require_full_coverage require_countertop
                          min_opening_clearance_mm max_module_depth_mm
                          require_service_clearance].freeze
@@ -215,6 +215,12 @@ module HomeCAD
         'filler_max_mm' => filler_max, 'countertop' => countertop,
         'countertop_thickness_mm' => countertop_thickness, 'plinth' => plinth,
         'name' => name, 'tier' => tier, 'span_mm' => span, 'top_mm' => top }
+      cuts = CountertopCutouts.normalize(input.fetch('countertop_cutouts', []))
+      constraint!('cutouts require an enabled base countertop') if cuts.any? && !countertop
+      if cuts.any?
+        canonical['countertop_cutouts'] = cuts
+        CountertopCutouts.straight(canonical)
+      end
       conflicts.concat(scene_conflicts(model, canonical, exclude_id: exclude_id))
       service_zones, service_findings, truncated = if normalized.any? { |item| item.key?('service_clearance_mm') }
         ServiceZones.check(model, canonical, exclude_run_id: exclude_id)
@@ -406,6 +412,9 @@ module HomeCAD
           'depth_mm' => values['modules'].map { |item| item['depth_mm'] }.max + 20,
           'bottom_mm' => values['modules'].first['bottom_mm'] + values['modules'].first['height_mm'],
           'height_mm' => values['countertop_thickness_mm'] } }
+        if values.key?('countertop_cutouts')
+          descriptors['countertop']['params']['cutouts'] = values['countertop_cutouts']
+        end
       end
       lowest = values['modules'].map { |item| item['bottom_mm'] }.min
       if values['plinth'] && lowest > TOLERANCE_MM
@@ -504,9 +513,9 @@ module HomeCAD
       end
       if values['countertop']
         top = values['modules'].first['bottom_mm'] + values['modules'].first['height_mm']
-        group = box!(root, 'countertop', 0, 0, top, span,
-                     values['modules'].map { |item| item['depth_mm'] }.max + 20,
-                     values['countertop_thickness_mm'])
+        group = root.entities.add_group
+        group.name = 'countertop'
+        CountertopCutouts.build!(group, CountertopCutouts.straight(values), top, values['countertop_thickness_mm'])
         KitchenData.write_child(group, record: values['semantic_objects'].fetch('countertop'),
           descriptor: descriptors.fetch('countertop'), run_id: run_id, wall_id: values['wall_id'])
       end

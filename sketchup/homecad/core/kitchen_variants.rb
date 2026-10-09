@@ -1,7 +1,7 @@
 module HomeCAD
   module KitchenVariants
-    MAX_CUTOUTS = 16
-    CUTOUT_BORDER_MM = 10.0
+    MAX_CUTOUTS = CountertopCutouts::MAX_CUTOUTS
+    CUTOUT_BORDER_MM = CountertopCutouts::BORDER_MM
     EDGES = %w[length_start length_end width_start width_end].freeze
 
     def self.normalize!(model, params, input, overrides: {})
@@ -27,23 +27,7 @@ module HomeCAD
             [key, { 'style' => style }]
           end
         end
-        cutouts = top.fetch('cutouts', [])
-        invalid!("countertop.cutouts must have at most #{MAX_CUTOUTS} entries") unless
-          cutouts.is_a?(Array) && cutouts.length <= MAX_CUTOUTS
-        normalized = cutouts.map.with_index do |item, index|
-          invalid!("cutouts[#{index}] must be an object") unless item.is_a?(Hash)
-          Primitives.check_keys!(item, %w[key leg_key offset_mm front_mm width_mm depth_mm])
-          key = item['key']; leg_key = item['leg_key']
-          invalid!('cutout key must be nonempty and at most 64 characters') unless
-            key.is_a?(String) && !key.empty? && key.length <= 64
-          invalid!('cutout leg_key must identify a Kitchen leg') unless params['legs'].any? { |leg| leg['key'] == leg_key }
-          { 'key' => key, 'leg_key' => leg_key,
-            'offset_mm' => Geometry.finite_number(item['offset_mm'], "cutouts[#{index}].offset_mm"),
-            'front_mm' => Geometry.finite_number(item['front_mm'], "cutouts[#{index}].front_mm"),
-            'width_mm' => Geometry.positive_length(item['width_mm'], "cutouts[#{index}].width_mm"),
-            'depth_mm' => Geometry.positive_length(item['depth_mm'], "cutouts[#{index}].depth_mm") }
-        end
-        invalid!('cutout keys must be unique') unless normalized.map { |item| item['key'] }.uniq.length == normalized.length
+        normalized = CountertopCutouts.normalize(top.fetch('cutouts', []), leg_keys: params['legs'].map { |leg| leg['key'] })
         material = Furniture.validate_identifier(top['material_id'], 'countertop.material_id')
         params['countertop'] = { 'enabled' => true, 'thickness_mm' => thickness,
           'first_end' => ends['first_end'], 'second_end' => ends['second_end'],
@@ -142,28 +126,17 @@ module HomeCAD
       polygon << [depth2, l2 - second_bevel] if second_bevel.positive?
       polygon << [depth2 - second_bevel, l2]
       polygon << [0.0, l2]
+      boundaries = []
       holes = top['cutouts'].map do |cutout|
         first_leg = cutout['leg_key'] == first['key']
         x0 = first_leg ? cutout['offset_mm'] - half2 : cutout['front_mm']
         y0 = first_leg ? cutout['front_mm'] : cutout['offset_mm'] - half1
         x1 = x0 + (first_leg ? cutout['width_mm'] : cutout['depth_mm'])
         y1 = y0 + (first_leg ? cutout['depth_mm'] : cutout['width_mm'])
-        if first_leg
-          constraint!('cutout must lie within the first arm beyond the shared corner') unless
-            x0 >= depth2 + CUTOUT_BORDER_MM && x1 <= l1 - CUTOUT_BORDER_MM &&
-            y0 >= CUTOUT_BORDER_MM && y1 <= depth1 - CUTOUT_BORDER_MM
-        else
-          constraint!('cutout must lie within the second arm beyond the shared corner') unless
-            y0 >= depth1 + CUTOUT_BORDER_MM && y1 <= l2 - CUTOUT_BORDER_MM &&
-            x0 >= CUTOUT_BORDER_MM && x1 <= depth2 - CUTOUT_BORDER_MM
-        end
+        boundaries << (first_leg ? [depth2,0,l1,depth1] : [0,depth1,depth2,l2])
         [x0, y0, x1, y1]
       end
-      holes.combination(2) do |a, b|
-        constraint!('countertop cutouts overlap') if
-          [a[0], b[0]].max < [a[2], b[2]].min - Kitchen::TOLERANCE_MM &&
-          [a[1], b[1]].max < [a[3], b[3]].min - Kitchen::TOLERANCE_MM
-      end
+      CountertopCutouts.validate_rectangles!(holes, boundaries)
       { 'origin_mm' => origin, 'x_axis' => d1, 'y_axis' => d2,
         'polygon_mm' => polygon, 'holes_mm' => holes,
         'arm_lengths_mm' => lengths, 'arm_depths_mm' => [depth1, depth2] }
@@ -177,23 +150,7 @@ module HomeCAD
         descriptor: descriptor, run_id: run_id, wall_id: params['legs'][0]['wall_id'])
       group.transformation = CornerKitchen.axes(shape['origin_mm'], shape['x_axis'], shape['y_axis'])
       z = params['bottom_mm'] + params['height_mm']
-      points = shape['polygon_mm'].map { |x, y| Geometry.point_mm([x, y, z], 'countertop.outer') }
-      face = group.entities.add_face(points)
-      Primitives.geometry_created!(face, 'SketchUp could not create continuous L countertop')
-      shape['holes_mm'].each do |x0, y0, x1, y1|
-        loop_points = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map do |x, y|
-          Geometry.point_mm([x, y, z], 'countertop.cutout')
-        end
-        inner = group.entities.add_face(loop_points)
-        Primitives.geometry_created!(inner, 'SketchUp could not create countertop cutout')
-        inner.erase!
-      end
-      expected_loops = shape['holes_mm'].length + 1
-      if face.respond_to?(:loops) && face.loops.length != expected_loops
-        raise Runtime::BridgeError.new(-32009, 'geometry_error', 'countertop cutout loop count is incorrect')
-      end
-      distance = Units.mm_to_internal(params['countertop']['thickness_mm'])
-      face.pushpull(face.normal.z.positive? ? distance : -distance)
+      CountertopCutouts.build!(group, shape, z, params['countertop']['thickness_mm'])
       group
     end
 
